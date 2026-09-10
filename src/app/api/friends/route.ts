@@ -22,10 +22,14 @@ export async function GET(req: NextRequest) {
 
     if (!me) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
 
+    // Szűrjük ki az esetleges saját ID-t a listákból (adatintegritás)
+    const filterSelf = (arr: any[]) =>
+      (arr ?? []).filter((u: any) => u._id?.toString() !== auth.userId && u !== auth.userId);
+
     return NextResponse.json({
-      friends: me.friends ?? [],
-      pendingRequests: me.pendingFriendRequests ?? [],
-      sentRequests: me.sentFriendRequests ?? [],
+      friends: filterSelf(me.friends as any[]),
+      pendingRequests: filterSelf(me.pendingFriendRequests as any[]),
+      sentRequests: filterSelf(me.sentFriendRequests as any[]),
     }, { status: 200, headers: CORS_HEADERS });
   } catch (error) {
     console.error('GET /api/friends error:', error);
@@ -58,14 +62,14 @@ export async function POST(req: NextRequest) {
     // If target already sent me a request → auto-accept
     const targetSentMe = target.sentFriendRequests.some((id: any) => id.toString() === auth.userId);
     if (targetSentMe) {
-      // Accept: add both as friends
+      // Accept: add both as friends, clean up all request arrays on both sides
       await User.findByIdAndUpdate(auth.userId, {
         $addToSet: { friends: targetUserId },
-        $pull: { pendingFriendRequests: targetUserId },
+        $pull: { pendingFriendRequests: targetUserId, sentFriendRequests: targetUserId },
       });
       await User.findByIdAndUpdate(targetUserId, {
         $addToSet: { friends: auth.userId },
-        $pull: { sentFriendRequests: auth.userId },
+        $pull: { sentFriendRequests: auth.userId, pendingFriendRequests: auth.userId },
       });
       return NextResponse.json({ message: 'Friend request accepted — you are now friends!' }, { status: 200, headers: CORS_HEADERS });
     }

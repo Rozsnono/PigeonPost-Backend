@@ -19,18 +19,25 @@ export async function PATCH(
 
   try {
     await connectToDatabase();
-    const message = await Message.findById(id);
+    const message = await Message.findById(id).lean();
     if (!message) return NextResponse.json({ error: 'Message not found' }, { status: 404, headers: CORS_HEADERS });
-    if (message.recipientId.toString() !== auth.userId && message.senderId.toString() !== auth.userId) {
+
+    const recipientId = (message.recipientId as any)?.toString?.() ?? String(message.recipientId);
+    const senderId = (message.senderId as any)?.toString?.() ?? String(message.senderId);
+
+    if (recipientId !== auth.userId && senderId !== auth.userId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: CORS_HEADERS });
     }
 
-    message.isArchived = !message.isArchived;
-    await message.save();
+    const updated = await Message.findByIdAndUpdate(
+      id,
+      { isArchived: !message.isArchived },
+      { new: true }
+    );
 
     return NextResponse.json({
-      message: message.isArchived ? 'Archived' : 'Unarchived',
-      isArchived: message.isArchived,
+      message: updated?.isArchived ? 'Archived' : 'Unarchived',
+      isArchived: updated?.isArchived,
     }, { status: 200, headers: CORS_HEADERS });
   } catch (error) {
     console.error('PATCH /api/messages/[id]/archive error:', error);

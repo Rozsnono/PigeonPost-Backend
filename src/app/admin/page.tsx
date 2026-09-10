@@ -1,99 +1,143 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+
+const SvgUsers = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+const SvgPigeon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 8c0 4-4 8-8 8H4l2-4"/><path d="M12 16V8"/><path d="M8 12h8"/><circle cx="18" cy="6" r="2"/></svg>;
+const SvgMail = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>;
+const SvgSkull = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a9 9 0 0 1 9 9c0 3.2-1.7 6-4.3 7.6l-.7 2.4H8l-.7-2.4A9.4 9.4 0 0 1 3 11 9 9 0 0 1 12 2z"/><line x1="9" y1="17" x2="9" y2="21"/><line x1="15" y1="17" x2="15" y2="21"/><line x1="9" y1="12" x2="9.01" y2="12"/><line x1="15" y1="12" x2="15.01" y2="12"/></svg>;
+const SvgSeed = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 22c0-6.075 4.925-11 11-11h1V9a7 7 0 0 0-7-7H5v2a5 5 0 0 1 5 5v1H9a7 7 0 0 0-7 7v2z"/></svg>;
+const SvgFlight = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21 4 19 4s-2 2-3.5 3.5L7 11l-8.2 1.8c-.5.1-.5.8 0 .9l6.2 1.4 1.4 6.2c.1.5.8.5.9 0z"/></svg>;
+const SvgLogout = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
+const SvgRefresh = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.18-5.21"/></svg>;
+const SvgShield = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
+
+type Tab = 'overview' | 'users' | 'flights' | 'messages';
+
+function StatCard({ title, value, Icon, color }: { title: string; value: number; Icon: () => React.ReactNode; color: string }) {
+  return (
+    <div style={{ background: '#fdfbf7', padding: 22, borderRadius: 16, border: '1px solid #e3d5b8', boxShadow: '0 1px 4px rgba(44,36,27,0.06)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#8c7d6b', textTransform: 'uppercase', letterSpacing: 0.8 }}>{title}</p>
+        <div style={{ color, opacity: 0.7 }}><Icon /></div>
+      </div>
+      <p style={{ margin: 0, fontSize: 30, fontFamily: 'Georgia, serif', fontWeight: 700, color }}>{(value ?? 0).toLocaleString()}</p>
+    </div>
+  );
+}
+
+function ActionBtn({ label, onClick, color }: { label: string; onClick: () => void; color: string }) {
+  return (
+    <button onClick={onClick} style={{ padding: '4px 10px', background: color + '18', color, border: `1px solid ${color}50`, borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>
+      {label}
+    </button>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; bg: string; text: string }> = {
+    flying: { label: 'Repül', bg: '#dbeafe', text: '#1e40af' },
+    idle: { label: 'Pihen', bg: '#dcfce7', text: '#166534' },
+    resting: { label: 'Regenerál', bg: '#fef3c7', text: '#92400e' },
+    returning: { label: 'Hazatér', bg: '#ede9fe', text: '#6d28d9' },
+    dead: { label: 'Elhullott', bg: '#fee2e2', text: '#b91c1c' },
+    delivered: { label: 'Kézbesítve', bg: '#dcfce7', text: '#166534' },
+    expired_lost: { label: 'Elveszett', bg: '#fee2e2', text: '#b91c1c' },
+  };
+  const s = map[status] ?? { label: status, bg: '#f0e8d4', text: '#4a3f32' };
+  return <span style={{ padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: s.bg, color: s.text }}>{s.label}</span>;
+}
+
+function EmptyState({ label }: { label: string }) {
+  return <div style={{ padding: '40px 20px', textAlign: 'center', color: '#a39887', fontSize: 14 }}>{label}</div>;
+}
+
+const TH = ({ children }: { children: string }) => (
+  <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 700, color: '#4a3f32', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6 }}>{children}</th>
+);
+const TD = ({ children, style = {} }: { children: React.ReactNode; style?: React.CSSProperties }) => (
+  <td style={{ padding: '11px 16px', borderTop: '1px solid #f0e8d4', ...style }}>{children}</td>
+);
 
 export default function AdminDashboard() {
   const [secret, setSecret] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentTab, setCurrentTab] = useState('overview'); // overview, users, flights
-  
+  const [currentTab, setCurrentTab] = useState<Tab>('overview');
   const [statsData, setStatsData] = useState<any>(null);
   const [usersData, setUsersData] = useState<any[]>([]);
   const [flightsData, setFlightsData] = useState<any[]>([]);
-  
+  const [messagesData, setMessagesData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [toast, setToast] = useState('');
+
+  const h = useCallback(() => ({ 'Authorization': `Bearer ${secret}` }), [secret]);
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500); };
+
+  const fetchStats   = useCallback(async () => { const r = await fetch('/api/admin/stats', { headers: h() }); if (r.ok) setStatsData(await r.json()); }, [h]);
+  const fetchUsers   = useCallback(async () => { const r = await fetch('/api/admin/users', { headers: h() }); if (r.ok) setUsersData(await r.json()); }, [h]);
+  const fetchFlights = useCallback(async () => { const r = await fetch('/api/admin/flights', { headers: h() }); if (r.ok) setFlightsData(await r.json()); }, [h]);
+  const fetchMsgs    = useCallback(async () => { const r = await fetch('/api/admin/messages', { headers: h() }); if (r.ok) setMessagesData(await r.json()); }, [h]);
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
+    e.preventDefault(); setLoading(true); setError('');
     try {
-      const res = await fetch('/api/admin/stats', {
-        headers: { 'Authorization': `Bearer ${secret}` }
-      });
-
-      if (!res.ok) throw new Error('Invalid secret');
-      
-      const result = await res.json();
-      setStatsData(result);
+      const r = await fetch('/api/admin/stats', { headers: h() });
+      if (!r.ok) throw new Error('Bad secret');
+      setStatsData(await r.json());
       setIsAuthenticated(true);
-    } catch (err) {
-      setError('Authentication failed. Check your secret.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchUsers = async () => {
-    const res = await fetch('/api/admin/users', { headers: { 'Authorization': `Bearer ${secret}` }});
-    if (res.ok) setUsersData(await res.json());
-  };
-
-  const fetchFlights = async () => {
-    const res = await fetch('/api/admin/flights', { headers: { 'Authorization': `Bearer ${secret}` }});
-    if (res.ok) setFlightsData(await res.json());
+    } catch { setError('Hitelesítés sikertelen. Ellenőrizd a titkos kulcsot.'); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => {
-    if (isAuthenticated) {
-      if (currentTab === 'users') fetchUsers();
-      if (currentTab === 'flights') fetchFlights();
-      // Overview stats are fetched on login, could add refresh here
-    }
+    if (!isAuthenticated) return;
+    if (currentTab === 'overview') fetchStats();
+    if (currentTab === 'users') fetchUsers();
+    if (currentTab === 'flights') fetchFlights();
+    if (currentTab === 'messages') fetchMsgs();
   }, [currentTab, isAuthenticated]);
 
-  const handleGiveSeeds = async (userId: string) => {
-    const amount = prompt('How many seeds to give?');
+  const giveItem = async (endpoint: string, userId: string, uname: string, label: string) => {
+    const amount = prompt(`Mennyi ${label} adjunk ${uname} számára?`);
     if (!amount || isNaN(Number(amount))) return;
-    
-    await fetch('/api/admin/users/seeds', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${secret}` },
-      body: JSON.stringify({ userId, amount: Number(amount) })
-    });
-    fetchUsers();
+    const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', ...h() }, body: JSON.stringify({ userId, amount: Number(amount) }) });
+    if (r.ok) { showToast(`✓ ${amount} ${label} adva: ${uname}`); fetchUsers(); }
+    else showToast(`✗ Nem sikerült adni ${label}`);
   };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to soft-delete this user?')) return;
-    await fetch(`/api/admin/users?id=${userId}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${secret}` }
-    });
-    fetchUsers();
+  const banUser = async (userId: string, uname: string) => {
+    if (!confirm(`Letiltod "${uname}" fiókját? (soft delete)`)) return;
+    const r = await fetch(`/api/admin/users?id=${userId}`, { method: 'DELETE', headers: h() });
+    if (r.ok) { showToast(`✓ ${uname} letiltva`); fetchUsers(); }
+    else showToast('✗ Nem sikerült letiltani');
+  };
+
+  const refreshTab = () => {
+    if (currentTab === 'overview') fetchStats();
+    if (currentTab === 'users') fetchUsers();
+    if (currentTab === 'flights') fetchFlights();
+    if (currentTab === 'messages') fetchMsgs();
   };
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#f4ebd8] flex items-center justify-center font-sans text-[#2c241b]">
-        <div className="w-full max-w-md bg-[#fdfbf7] p-8 rounded-2xl shadow-xl border border-[#e3d5b8]">
-          <h1 className="text-3xl font-serif mb-6 text-center tracking-widest">PigeonPost Admin</h1>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Admin Secret</label>
-              <input 
-                type="password" 
-                value={secret}
-                onChange={(e) => setSecret(e.target.value)}
-                className="w-full px-4 py-2 border border-[#e3d5b8] rounded bg-[#f4ebd8] focus:outline-none focus:ring-2 focus:ring-[#9b2c2c]"
-                placeholder="Enter secret..."
-              />
-            </div>
-            {error && <p className="text-red-600 text-sm">{error}</p>}
-            <button type="submit" disabled={loading} className="w-full py-2 bg-[#9b2c2c] text-white rounded font-medium hover:bg-[#742a2a] transition-colors">
-              {loading ? 'Authenticating...' : 'Enter Dashboard'}
+      <div style={{ minHeight: '100vh', background: '#f4ebd8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui,sans-serif' }}>
+        <div style={{ width: '100%', maxWidth: 420, background: '#fdfbf7', padding: 40, borderRadius: 20, boxShadow: '0 8px 40px rgba(44,36,27,0.14)', border: '1px solid #e3d5b8' }}>
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={{ width: 52, height: 52, background: '#2c241b', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', color: '#fdfbf7' }}><SvgShield /></div>
+            <h1 style={{ fontFamily: 'Georgia,serif', fontSize: 24, color: '#2c241b', margin: 0 }}>PigeonPost Admin</h1>
+            <p style={{ color: '#8c7d6b', fontSize: 13, margin: '6px 0 0' }}>Biztonságos belépés</p>
+          </div>
+          <form onSubmit={handleLogin}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#4a3f32', marginBottom: 6 }}>Admin titkos kulcs</label>
+            <input type="password" value={secret} onChange={e => setSecret(e.target.value)} placeholder="Titkos kulcs..."
+              style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #e3d5b8', borderRadius: 10, background: '#f4ebd8', fontSize: 14, color: '#2c241b', outline: 'none', boxSizing: 'border-box', marginBottom: 14 }} />
+            {error && <p style={{ color: '#b91c1c', fontSize: 13, marginBottom: 10 }}>{error}</p>}
+            <button type="submit" disabled={loading}
+              style={{ width: '100%', padding: 12, background: '#7a2222', color: '#fdfbf7', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+              {loading ? 'Hitelesítés...' : 'Belépés az irányítópultra'}
             </button>
           </form>
         </div>
@@ -101,158 +145,198 @@ export default function AdminDashboard() {
     );
   }
 
+  const navItems = [
+    { id: 'overview' as Tab, label: 'Áttekintés', Icon: SvgShield },
+    { id: 'users' as Tab, label: 'Felhasználók', Icon: SvgUsers },
+    { id: 'flights' as Tab, label: 'Galambok', Icon: SvgPigeon },
+    { id: 'messages' as Tab, label: 'Üzenetek', Icon: SvgMail },
+  ];
+
   return (
-    <div className="min-h-screen font-sans text-[#2c241b] flex bg-[#f4ebd8]">
-      {/* Sidebar */}
-      <div className="w-64 bg-[#2c241b] text-[#fdfbf7] flex flex-col shadow-2xl relative z-10">
-        <div className="p-6 border-b border-[#4a3f32]">
-          <h1 className="font-serif text-2xl tracking-wider text-center">PigeonPost</h1>
-          <p className="text-xs text-center text-[#e3d5b8] mt-1">Admin Panel</p>
+    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui,sans-serif', background: '#f4ebd8' }}>
+      <div style={{ width: 230, background: '#2c241b', color: '#fdfbf7', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '26px 18px 18px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <p style={{ fontFamily: 'Georgia,serif', fontSize: 19, margin: 0, letterSpacing: 1 }}>PigeonPost</p>
+          <p style={{ fontSize: 10, color: '#a39887', margin: '4px 0 0', letterSpacing: 2, textTransform: 'uppercase' }}>Admin Panel</p>
         </div>
-        <nav className="flex-1 p-4 space-y-2">
-          <button 
-            onClick={() => setCurrentTab('overview')} 
-            className={`w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${currentTab === 'overview' ? 'bg-[#9b2c2c] text-white' : 'hover:bg-[#4a3f32] text-[#e3d5b8]'}`}
-          >Overview</button>
-          <button 
-            onClick={() => setCurrentTab('users')} 
-            className={`w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${currentTab === 'users' ? 'bg-[#9b2c2c] text-white' : 'hover:bg-[#4a3f32] text-[#e3d5b8]'}`}
-          >Users</button>
-          <button 
-            onClick={() => setCurrentTab('flights')} 
-            className={`w-full text-left py-3 px-4 rounded-lg font-medium transition-colors ${currentTab === 'flights' ? 'bg-[#9b2c2c] text-white' : 'hover:bg-[#4a3f32] text-[#e3d5b8]'}`}
-          >Active Flights</button>
+        <nav style={{ flex: 1, padding: 10 }}>
+          {navItems.map(({ id, label, Icon }) => (
+            <button key={id} onClick={() => setCurrentTab(id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '10px 13px', border: 'none', borderRadius: 9, marginBottom: 3, cursor: 'pointer', fontSize: 13,
+                fontWeight: currentTab === id ? 700 : 500, textAlign: 'left',
+                background: currentTab === id ? '#7a2222' : 'transparent',
+                color: currentTab === id ? '#fdfbf7' : '#a39887' }}>
+              <Icon />{label}
+            </button>
+          ))}
         </nav>
-        <div className="p-4 border-t border-[#4a3f32]">
-          <button onClick={() => setIsAuthenticated(false)} className="w-full py-2 border border-[#e3d5b8] rounded text-sm hover:bg-[#4a3f32] transition-colors">Log Out</button>
+        <div style={{ padding: 10, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <button onClick={() => setIsAuthenticated(false)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 13px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9, background: 'transparent', color: '#a39887', cursor: 'pointer', fontSize: 12 }}>
+            <SvgLogout />Kijelentkezés
+          </button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Topbar */}
-        <header className="h-16 bg-[#fdfbf7] border-b border-[#e3d5b8] flex items-center justify-between px-8">
-          <h2 className="font-serif text-xl font-bold">
-            {currentTab === 'overview' && 'Realm Overview'}
-            {currentTab === 'users' && 'Manage Users'}
-            {currentTab === 'flights' && 'Monitor Active Flights'}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        <header style={{ height: 58, background: '#fdfbf7', borderBottom: '1px solid #e3d5b8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', flexShrink: 0 }}>
+          <h2 style={{ fontFamily: 'Georgia,serif', fontSize: 17, margin: 0, color: '#2c241b' }}>
+            {navItems.find(n => n.id === currentTab)?.label}
           </h2>
-          <div className="flex items-center space-x-4">
-            <span className="text-sm font-medium">Server Time: <span className="font-mono bg-[#f4ebd8] px-2 py-1 rounded border border-[#e3d5b8]">{statsData?.serverTime}</span></span>
-            <div className="w-8 h-8 bg-[#9b2c2c] rounded-full flex items-center justify-center text-white text-xs font-bold">A</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {toast && <span style={{ fontSize: 12, color: toast.startsWith('✓') ? '#059669' : '#b91c1c', fontWeight: 700 }}>{toast}</span>}
+            <span style={{ fontSize: 11, color: '#8c7d6b', fontFamily: 'monospace', background: '#f4ebd8', padding: '3px 9px', borderRadius: 6, border: '1px solid #e3d5b8' }}>{statsData?.serverTime}</span>
+            <button onClick={refreshTab}
+              style={{ padding: '6px 12px', background: '#f4ebd8', border: '1px solid #e3d5b8', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#4a3f32', fontWeight: 600 }}>
+              <SvgRefresh />Frissítés
+            </button>
           </div>
         </header>
 
-        {/* Dashboard Content */}
-        <main className="flex-1 overflow-y-auto p-8 bg-[#f4ebd8]/30">
-          
-          {currentTab === 'overview' && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <StatCard title="Active Users" value={statsData?.stats.activeUsers.toLocaleString()} icon="👥" />
-                <StatCard title="Flying Pigeons" value={statsData?.stats.flyingPigeons.toLocaleString()} icon="🕊️" />
-                <StatCard title="Dead Pigeons (24h)" value={statsData?.stats.deadPigeons.toLocaleString()} icon="☠️" textColor="text-red-700" />
-                <StatCard title="Seed Economy" value={statsData?.stats.seedEconomy.toLocaleString()} icon="🌾" />
-              </div>
-              <div className="bg-[#fdfbf7] rounded-xl border border-[#e3d5b8] shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-[#e3d5b8] bg-[#f4ebd8]">
-                  <h3 className="font-serif font-bold text-lg">Recent System Logs</h3>
-                </div>
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-[#e3d5b8]/50">
-                    <tr>
-                      <th className="px-6 py-3 font-medium text-[#4a3f32]">Timestamp</th>
-                      <th className="px-6 py-3 font-medium text-[#4a3f32]">Level</th>
-                      <th className="px-6 py-3 font-medium text-[#4a3f32]">Message</th>
-                      <th className="px-6 py-3 font-medium text-[#4a3f32]">Context</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#e3d5b8]">
-                    {statsData?.logs.map((log: any) => (
-                      <tr key={log.id} className="hover:bg-[#f4ebd8]/50">
-                        <td className="px-6 py-4 font-mono text-xs">{log.timestamp}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 rounded text-xs font-bold ${log.level === 'error' ? 'bg-red-100 text-red-800' : log.level === 'warn' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>{log.level.toUpperCase()}</span>
-                        </td>
-                        <td className="px-6 py-4">{log.message}</td>
-                        <td className="px-6 py-4 text-[#4a3f32] font-mono text-xs">{log.context}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
+        <main style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
 
+          {/* OVERVIEW */}
+          {currentTab === 'overview' && (<>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 16, marginBottom: 24 }}>
+              <StatCard title="Aktív felhasználók" value={statsData?.stats.activeUsers} Icon={SvgUsers} color="#2c241b" />
+              <StatCard title="Repülő galambok"    value={statsData?.stats.flyingPigeons} Icon={SvgPigeon} color="#2563eb" />
+              <StatCard title="Elhullott (24h)"    value={statsData?.stats.deadPigeons} Icon={SvgSkull} color="#b91c1c" />
+              <StatCard title="Maggazdaság"         value={statsData?.stats.seedEconomy} Icon={SvgSeed} color="#059669" />
+            </div>
+            <div style={{ background: '#fdfbf7', borderRadius: 14, border: '1px solid #e3d5b8', overflow: 'hidden' }}>
+              <div style={{ padding: '14px 22px', borderBottom: '1px solid #e3d5b8', background: '#f4ebd8' }}>
+                <h3 style={{ fontFamily: 'Georgia,serif', fontSize: 15, margin: 0 }}>Rendszernapló</h3>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead><tr style={{ background: 'rgba(227,213,184,0.3)' }}>{['Időbélyeg','Szint','Üzenet','Kontextus'].map(h => <TH key={h}>{h}</TH>)}</tr></thead>
+                <tbody>
+                  {statsData?.logs.map((log: any) => (
+                    <tr key={log.id}>
+                      <TD style={{ fontFamily: 'monospace', fontSize: 11, color: '#5c4f3d' }}>{log.timestamp}</TD>
+                      <TD><span style={{ padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 700,
+                        background: log.level==='error'?'#fee2e2':log.level==='warn'?'#fef3c7':'#dbeafe',
+                        color: log.level==='error'?'#b91c1c':log.level==='warn'?'#92400e':'#1e40af' }}>{log.level.toUpperCase()}</span></TD>
+                      <TD>{log.message}</TD>
+                      <TD style={{ fontFamily: 'monospace', fontSize: 11, color: '#8c7d6b' }}>{log.context}</TD>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>)}
+
+          {/* USERS */}
           {currentTab === 'users' && (
-            <div className="bg-[#fdfbf7] rounded-xl border border-[#e3d5b8] shadow-sm overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-[#e3d5b8]/50">
-                  <tr>
-                    <th className="px-6 py-3 font-medium text-[#4a3f32]">Username</th>
-                    <th className="px-6 py-3 font-medium text-[#4a3f32]">Email</th>
-                    <th className="px-6 py-3 font-medium text-[#4a3f32]">Lvl</th>
-                    <th className="px-6 py-3 font-medium text-[#4a3f32]">Seeds</th>
-                    <th className="px-6 py-3 font-medium text-[#4a3f32]">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#e3d5b8]">
-                  {usersData.map((user: any) => (
-                    <tr key={user._id} className="hover:bg-[#f4ebd8]/50">
-                      <td className="px-6 py-4 font-bold">{user.username}</td>
-                      <td className="px-6 py-4 text-gray-500">{user.email}</td>
-                      <td className="px-6 py-4">{user.level}</td>
-                      <td className="px-6 py-4">{user.inventory.seeds}</td>
-                      <td className="px-6 py-4 space-x-2">
-                        <button onClick={() => handleGiveSeeds(user._id)} className="px-3 py-1 bg-green-100 text-green-800 rounded font-medium text-xs">Give Seeds</button>
-                        <button onClick={() => handleDeleteUser(user._id)} className="px-3 py-1 bg-red-100 text-red-800 rounded font-medium text-xs">Ban</button>
-                      </td>
+            <div style={{ background: '#fdfbf7', borderRadius: 14, border: '1px solid #e3d5b8', overflow: 'hidden' }}>
+              <div style={{ padding: '14px 22px', borderBottom: '1px solid #e3d5b8', background: '#f4ebd8' }}>
+                <h3 style={{ fontFamily: 'Georgia,serif', fontSize: 15, margin: 0 }}>Felhasználók ({usersData.length})</h3>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead><tr style={{ background: 'rgba(227,213,184,0.3)' }}>{['Felhasználónév','Email','Szint','Magvak','Kalitkák','Regisztrált','Műveletek'].map(h => <TH key={h}>{h}</TH>)}</tr></thead>
+                <tbody>
+                  {usersData.map((u: any) => (
+                    <tr key={u._id}>
+                      <TD>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700 }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#2c241b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fdfbf7', fontWeight: 800, fontSize: 11 }}>
+                            {u.username.charAt(0).toUpperCase()}
+                          </div>
+                          {u.username}
+                        </div>
+                      </TD>
+                      <TD style={{ color: '#8c7d6b' }}>{u.email}</TD>
+                      <TD><span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 7px', borderRadius: 5, fontWeight: 700, fontSize: 11 }}>Lv.{u.level}</span></TD>
+                      <TD style={{ color: '#059669', fontWeight: 700 }}>{u.inventory?.seeds ?? 0}</TD>
+                      <TD style={{ color: '#d97706', fontWeight: 700 }}>{u.inventory?.cages ?? 0}</TD>
+                      <TD style={{ fontSize: 11, color: '#8c7d6b', fontFamily: 'monospace' }}>{new Date(u.createdAt).toLocaleDateString('hu-HU')}</TD>
+                      <TD>
+                        <div style={{ display: 'flex', gap: 5 }}>
+                          <ActionBtn label="+ Mag" onClick={() => giveItem('/api/admin/users/seeds', u._id, u.username, 'mag')} color="#059669" />
+                          <ActionBtn label="+ Kalitka" onClick={() => giveItem('/api/admin/users/cages', u._id, u.username, 'kalitka')} color="#d97706" />
+                          <ActionBtn label="Tiltás" onClick={() => banUser(u._id, u.username)} color="#b91c1c" />
+                        </div>
+                      </TD>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {usersData.length === 0 && <EmptyState label="Nincsenek felhasználók" />}
             </div>
           )}
 
+          {/* FLIGHTS / PIGEONS */}
           {currentTab === 'flights' && (
-            <div className="bg-[#fdfbf7] rounded-xl border border-[#e3d5b8] shadow-sm overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-[#e3d5b8]/50">
-                  <tr>
-                    <th className="px-6 py-3 font-medium text-[#4a3f32]">Pigeon</th>
-                    <th className="px-6 py-3 font-medium text-[#4a3f32]">Owner</th>
-                    <th className="px-6 py-3 font-medium text-[#4a3f32]">Fatigue</th>
-                    <th className="px-6 py-3 font-medium text-[#4a3f32]">Last Updated</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#e3d5b8]">
-                  {flightsData.map((flight: any) => (
-                    <tr key={flight._id} className="hover:bg-[#f4ebd8]/50">
-                      <td className="px-6 py-4 font-bold">{flight.name} <span className="text-gray-500 text-xs">{flight.identifier}</span></td>
-                      <td className="px-6 py-4">{flight.ownerId?.username || 'Unknown'}</td>
-                      <td className="px-6 py-4">{flight.fatigue}%</td>
-                      <td className="px-6 py-4 text-xs font-mono">{new Date(flight.updatedAt).toLocaleString()}</td>
+            <div style={{ background: '#fdfbf7', borderRadius: 14, border: '1px solid #e3d5b8', overflow: 'hidden' }}>
+              <div style={{ padding: '14px 22px', borderBottom: '1px solid #e3d5b8', background: '#f4ebd8' }}>
+                <h3 style={{ fontFamily: 'Georgia,serif', fontSize: 15, margin: 0 }}>Repülő galambok ({flightsData.length})</h3>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead><tr style={{ background: 'rgba(227,213,184,0.3)' }}>{['Galamb','Tulajdonos','Állapot','Fáradtság','Utoljára frissítve'].map(h => <TH key={h}>{h}</TH>)}</tr></thead>
+                <tbody>
+                  {flightsData.map((p: any) => (
+                    <tr key={p._id}>
+                      <TD style={{ fontWeight: 700 }}>{p.name} <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#8c7d6b' }}>{p.identifier}</span></TD>
+                      <TD style={{ color: '#5c4f3d' }}>{p.ownerId?.username ?? 'Ismeretlen'}</TD>
+                      <TD><StatusBadge status={p.status} /></TD>
+                      <TD>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, height: 5, background: '#f0e8d4', borderRadius: 3 }}>
+                            <div style={{ height: 5, borderRadius: 3, width: `${p.fatigue}%`, background: p.fatigue>70?'#b91c1c':p.fatigue>40?'#d97706':'#059669' }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: '#4a3f32', fontWeight: 600, minWidth: 30 }}>{p.fatigue}%</span>
+                        </div>
+                      </TD>
+                      <TD style={{ fontSize: 11, fontFamily: 'monospace', color: '#8c7d6b' }}>{new Date(p.updatedAt).toLocaleString('hu-HU')}</TD>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {flightsData.length === 0 && <EmptyState label="Jelenleg nincs repülő galamb" />}
             </div>
           )}
+
+          {/* MESSAGES */}
+          {currentTab === 'messages' && (<>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 16, marginBottom: 24 }}>
+              <StatCard title="Összes üzenet" value={messagesData?.stats.totalMessages} Icon={SvgMail} color="#2c241b" />
+              <StatCard title="Repülés alatt" value={messagesData?.stats.flyingMessages} Icon={SvgFlight} color="#2563eb" />
+              <StatCard title="Kézbesítve" value={messagesData?.stats.deliveredMessages} Icon={SvgMail} color="#059669" />
+              <StatCard title="Elveszett" value={messagesData?.stats.lostMessages} Icon={SvgSkull} color="#b91c1c" />
+            </div>
+            <div style={{ background: '#fdfbf7', borderRadius: 14, border: '1px solid #e3d5b8', overflow: 'hidden' }}>
+              <div style={{ padding: '14px 22px', borderBottom: '1px solid #e3d5b8', background: '#f4ebd8' }}>
+                <h3 style={{ fontFamily: 'Georgia,serif', fontSize: 15, margin: 0 }}>Aktív repülések</h3>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead><tr style={{ background: 'rgba(227,213,184,0.3)' }}>{['Feladó','Címzett','Távolság','Elküldve','Várható érkezés','Állapot'].map(h => <TH key={h}>{h}</TH>)}</tr></thead>
+                <tbody>
+                  {(messagesData?.activeMessages ?? []).map((msg: any) => {
+                    const sender = typeof msg.senderId === 'object' ? msg.senderId?.username : '?';
+                    const recipient = typeof msg.recipientId === 'object' ? msg.recipientId?.username : '?';
+                    const eta = msg.estimatedArrivalAt ? new Date(msg.estimatedArrivalAt) : null;
+                    const isLate = eta && eta < new Date();
+                    return (
+                      <tr key={msg._id}>
+                        <TD style={{ fontWeight: 700 }}>{sender}</TD>
+                        <TD>{recipient}</TD>
+                        <TD style={{ color: '#2563eb', fontWeight: 600 }}>{Math.round(msg.distanceKm ?? 0)} km</TD>
+                        <TD style={{ fontSize: 11, fontFamily: 'monospace', color: '#8c7d6b' }}>{msg.dispatchedAt ? new Date(msg.dispatchedAt).toLocaleString('hu-HU') : '—'}</TD>
+                        <TD style={{ fontSize: 11, fontFamily: 'monospace', color: isLate ? '#b91c1c' : '#059669', fontWeight: isLate ? 700 : 400 }}>
+                          {eta ? eta.toLocaleTimeString('hu-HU') : '—'}
+                          {isLate && <span style={{ marginLeft: 5, fontSize: 10 }}>(késik!)</span>}
+                        </TD>
+                        <TD><StatusBadge status={msg.status} /></TD>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {(messagesData?.activeMessages ?? []).length === 0 && <EmptyState label="Jelenleg nincs aktív repülés" />}
+            </div>
+          </>)}
 
         </main>
       </div>
-    </div>
-  );
-}
-
-function StatCard({ title, value, icon, textColor = "text-[#2c241b]" }: { title: string, value: string | number, icon: string, textColor?: string }) {
-  return (
-    <div className="bg-[#fdfbf7] p-6 rounded-xl border border-[#e3d5b8] shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-bold text-[#4a3f32] uppercase tracking-wider">{title}</h3>
-        <span className="text-2xl">{icon}</span>
-      </div>
-      <div className={`text-3xl font-serif font-bold ${textColor}`}>{value}</div>
     </div>
   );
 }
