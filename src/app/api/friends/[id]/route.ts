@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
@@ -19,19 +20,23 @@ export async function DELETE(
 
   try {
     await connectToDatabase();
-    // Remove from both sides
-    await User.findByIdAndUpdate(auth.userId, {
+
+    const authObjId = new mongoose.Types.ObjectId(auth.userId);
+    const targetObjId = new mongoose.Types.ObjectId(targetUserId);
+
+    // Remove from both sides (supporting both ObjectId and string representation in DB)
+    await User.findByIdAndUpdate(authObjId, {
       $pull: {
-        friends: targetUserId,
-        sentFriendRequests: targetUserId,
-        pendingFriendRequests: targetUserId,
+        friends: { $in: [targetObjId, targetUserId] },
+        sentFriendRequests: { $in: [targetObjId, targetUserId] },
+        pendingFriendRequests: { $in: [targetObjId, targetUserId] },
       },
     });
-    await User.findByIdAndUpdate(targetUserId, {
+    await User.findByIdAndUpdate(targetObjId, {
       $pull: {
-        friends: auth.userId,
-        sentFriendRequests: auth.userId,
-        pendingFriendRequests: auth.userId,
+        friends: { $in: [authObjId, auth.userId] },
+        sentFriendRequests: { $in: [authObjId, auth.userId] },
+        pendingFriendRequests: { $in: [authObjId, auth.userId] },
       },
     });
 
