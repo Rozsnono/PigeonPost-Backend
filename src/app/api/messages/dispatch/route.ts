@@ -5,6 +5,7 @@ import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 import { z } from 'zod';
+import { createLog } from '@/lib/logger';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
@@ -44,7 +45,8 @@ export async function POST(req: NextRequest) {
 
     const { recipientId, pigeonId, content, startCoords, endCoords } = validation.data;
 
-    const [recipient, pigeon] = await Promise.all([
+    const [sender, recipient, pigeon] = await Promise.all([
+      User.findById(auth.userId).lean(),
       User.findById(recipientId).lean(),
       Pigeon.findById(pigeonId),
     ]);
@@ -57,9 +59,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Pigeon is ${pigeon.status} — choose an idle courier` }, { status: 400, headers: CORS_HEADERS });
     }
 
-    const start = startCoords ?? { lat: 47.4979, lng: 19.0402 };
-    const end = endCoords ?? { lat: 47.5, lng: 19.05 };
-    const distanceKm = haversineKm(start, end);
+    const start = startCoords ?? (sender?.location?.lat && sender?.location?.lng 
+      ? { lat: sender.location.lat, lng: sender.location.lng } 
+      : { lat: 47.4979, lng: 19.0402 });
+      
+    const end = endCoords ?? (recipient?.location?.lat && recipient?.location?.lng 
+      ? { lat: recipient.location.lat, lng: recipient.location.lng } 
+      : { lat: 47.5, lng: 19.05 });
+
+    const distanceKm = Math.max(1, Math.round(haversineKm(start, end)));
     const flightDurationMinutes = Math.round((distanceKm / 100) * 60); // 100 km/h base speed
     const deathChance = Math.min(distanceKm * 0.01 * Math.max(1, 3 - pigeon.level), 25);
     const lostChance = Math.min(distanceKm * 0.02 * Math.max(1, 3 - pigeon.level), 40);
@@ -91,6 +99,13 @@ export async function POST(req: NextRequest) {
 
     // Increment sender stats
     await User.findByIdAndUpdate(auth.userId, { $inc: { 'stats.sentCount': 1 } });
+
+    await createLog(
+      'info',
+      'FlightEngine',
+      `Új levél útnak indítva (${pigeon.name}, ~${distanceKm} km)`,
+      { messageId: message._id, senderId: auth.userId, recipientId, pigeonId }
+    );
 
     return NextResponse.json({
       message: 'Letter dispatched!',

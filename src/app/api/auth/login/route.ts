@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import { z } from 'zod';
+import { createLog } from '@/lib/logger';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -103,6 +104,8 @@ export async function POST(req: NextRequest) {
     );
 
     console.log('[login/route] Login successful for:', user.username);
+    await createLog('info', 'Auth', `Sikeres bejelentkezés: ${user.username}`, { userId: user._id });
+
     return NextResponse.json(
       {
         message: 'Login successful',

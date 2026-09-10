@@ -15,9 +15,9 @@ export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
     const me = await User.findById(auth.userId)
-      .populate({ path: 'friends', select: '_id username level avatar', strictPopulate: false })
-      .populate({ path: 'pendingFriendRequests', select: '_id username level avatar', strictPopulate: false })
-      .populate({ path: 'sentFriendRequests', select: '_id username level avatar', strictPopulate: false })
+      .populate({ path: 'friends', select: '_id username level avatar location', strictPopulate: false })
+      .populate({ path: 'pendingFriendRequests', select: '_id username level avatar location', strictPopulate: false })
+      .populate({ path: 'sentFriendRequests', select: '_id username level avatar location', strictPopulate: false })
       .lean();
 
     if (!me) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });

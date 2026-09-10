@@ -30,6 +30,8 @@ async function seed() {
       avatar: 'pigeon-brown',
       level: 5,
       inventory: { seeds: 1500, cages: 4 },
+      location: { city: 'Budapest Dúc', lat: 47.4979, lng: 19.0402 },
+      hasCompletedOnboarding: true,
       stats: { sentCount: 3, receivedCount: 2, deadPigeonsCount: 0, maxDistance: 160 },
     });
 
@@ -40,12 +42,27 @@ async function seed() {
       avatar: 'pigeon-white',
       level: 3,
       inventory: { seeds: 800, cages: 2 },
+      location: { city: 'Szeged Dúc', lat: 46.2530, lng: 20.1414 },
+      hasCompletedOnboarding: true,
       stats: { sentCount: 1, receivedCount: 3, deadPigeonsCount: 0, maxDistance: 80 },
     });
 
+    const eszter = await User.create({
+      username: 'TothEszter',
+      email: 'eszter@example.com',
+      passwordHash,
+      avatar: 'pigeon-basic',
+      level: 2,
+      inventory: { seeds: 500, cages: 1 },
+      location: { city: 'Debrecen Dúc', lat: 47.5316, lng: 21.6273 },
+      hasCompletedOnboarding: true,
+      stats: { sentCount: 0, receivedCount: 1, deadPigeonsCount: 0, maxDistance: 120 },
+    });
+
     // Make them mutual friends
-    await User.findByIdAndUpdate(bela._id, { $addToSet: { friends: anna._id } });
-    await User.findByIdAndUpdate(anna._id, { $addToSet: { friends: bela._id } });
+    await User.findByIdAndUpdate(bela._id, { $addToSet: { friends: [anna._id, eszter._id] } });
+    await User.findByIdAndUpdate(anna._id, { $addToSet: { friends: [bela._id, eszter._id] } });
+    await User.findByIdAndUpdate(eszter._id, { $addToSet: { friends: [bela._id, anna._id] } });
     console.log('Users created and friended.');
 
 

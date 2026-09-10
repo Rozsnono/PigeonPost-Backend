@@ -114,6 +114,52 @@ export default function AdminDashboard() {
     else showToast('✗ Nem sikerült letiltani');
   };
 
+  const deleteUser = async (userId: string, uname: string) => {
+    if (!confirm(`Biztosan törölni szeretnéd "${uname}" fiókját?`)) return;
+    const permanent = confirm(`Véglegesen töröljük az adatbázisból is?\nOK = Végleges törlés\nMégse = Csak archiválás/soft delete`);
+    const r = await fetch(`/api/admin/users?id=${userId}&permanent=${permanent}`, { method: 'DELETE', headers: h() });
+    if (r.ok) {
+      showToast(`✓ ${uname} sikeresen törölve`);
+      fetchUsers();
+    } else {
+      showToast('✗ Nem sikerült törölni a felhasználót');
+    }
+  };
+
+  const recallPigeon = async (pigeonId: string, name: string) => {
+    if (!confirm(`Azonnal hazahívod "${name}" galambot a dúcába és kipihenteted (0% fáradtság)?`)) return;
+    const r = await fetch('/api/admin/pigeons/recall', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...h() },
+      body: JSON.stringify({ pigeonId }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      showToast(`✓ ${data.message || `${name} hazatért!`}`);
+      fetchFlights();
+      fetchStats();
+    } else {
+      showToast(`✗ ${data.error || 'Nem sikerült hazahívni'}`);
+    }
+  };
+
+  const deliverMessage = async (messageId: string) => {
+    if (!confirm('Azonnal lezárod ezt a repülést és kézbesíted a levelet?')) return;
+    const r = await fetch('/api/admin/messages/deliver', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...h() },
+      body: JSON.stringify({ messageId }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      showToast(`✓ ${data.message || 'Repülés lezárva!'}`);
+      fetchMsgs();
+      fetchStats();
+    } else {
+      showToast(`✗ ${data.error || 'Nem sikerült kézbesíteni'}`);
+    }
+  };
+
   const refreshTab = () => {
     if (currentTab === 'overview') fetchStats();
     if (currentTab === 'users') fetchUsers();
@@ -253,7 +299,8 @@ export default function AdminDashboard() {
                         <div style={{ display: 'flex', gap: 5 }}>
                           <ActionBtn label="+ Mag" onClick={() => giveItem('/api/admin/users/seeds', u._id, u.username, 'mag')} color="#059669" />
                           <ActionBtn label="+ Kalitka" onClick={() => giveItem('/api/admin/users/cages', u._id, u.username, 'kalitka')} color="#d97706" />
-                          <ActionBtn label="Tiltás" onClick={() => banUser(u._id, u.username)} color="#b91c1c" />
+                          <ActionBtn label="Tiltás" onClick={() => banUser(u._id, u.username)} color="#ea580c" />
+                          <ActionBtn label="Törlés" onClick={() => deleteUser(u._id, u.username)} color="#b91c1c" />
                         </div>
                       </TD>
                     </tr>
@@ -268,10 +315,10 @@ export default function AdminDashboard() {
           {currentTab === 'flights' && (
             <div style={{ background: '#fdfbf7', borderRadius: 14, border: '1px solid #e3d5b8', overflow: 'hidden' }}>
               <div style={{ padding: '14px 22px', borderBottom: '1px solid #e3d5b8', background: '#f4ebd8' }}>
-                <h3 style={{ fontFamily: 'Georgia,serif', fontSize: 15, margin: 0 }}>Repülő galambok ({flightsData.length})</h3>
+                <h3 style={{ fontFamily: 'Georgia,serif', fontSize: 15, margin: 0 }}>Repülő és Dúc Galambok ({flightsData.length})</h3>
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead><tr style={{ background: 'rgba(227,213,184,0.3)' }}>{['Galamb','Tulajdonos','Állapot','Fáradtság','Utoljára frissítve'].map(h => <TH key={h}>{h}</TH>)}</tr></thead>
+                <thead><tr style={{ background: 'rgba(227,213,184,0.3)' }}>{['Galamb','Tulajdonos','Állapot','Fáradtság','Utoljára frissítve','Művelet'].map(h => <TH key={h}>{h}</TH>)}</tr></thead>
                 <tbody>
                   {flightsData.map((p: any) => (
                     <tr key={p._id}>
@@ -287,6 +334,9 @@ export default function AdminDashboard() {
                         </div>
                       </TD>
                       <TD style={{ fontSize: 11, fontFamily: 'monospace', color: '#8c7d6b' }}>{new Date(p.updatedAt).toLocaleString('hu-HU')}</TD>
+                      <TD>
+                        <ActionBtn label="Azonnal Haza" onClick={() => recallPigeon(p._id, p.name)} color="#0284c7" />
+                      </TD>
                     </tr>
                   ))}
                 </tbody>
@@ -308,7 +358,7 @@ export default function AdminDashboard() {
                 <h3 style={{ fontFamily: 'Georgia,serif', fontSize: 15, margin: 0 }}>Aktív repülések</h3>
               </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead><tr style={{ background: 'rgba(227,213,184,0.3)' }}>{['Feladó','Címzett','Távolság','Elküldve','Várható érkezés','Állapot'].map(h => <TH key={h}>{h}</TH>)}</tr></thead>
+                <thead><tr style={{ background: 'rgba(227,213,184,0.3)' }}>{['Feladó','Címzett','Távolság','Elküldve','Várható érkezés','Állapot','Művelet'].map(h => <TH key={h}>{h}</TH>)}</tr></thead>
                 <tbody>
                   {(messagesData?.activeMessages ?? []).map((msg: any) => {
                     const sender = typeof msg.senderId === 'object' ? msg.senderId?.username : '?';
@@ -326,6 +376,9 @@ export default function AdminDashboard() {
                           {isLate && <span style={{ marginLeft: 5, fontSize: 10 }}>(késik!)</span>}
                         </TD>
                         <TD><StatusBadge status={msg.status} /></TD>
+                        <TD>
+                          <ActionBtn label="Kézbesítés" onClick={() => deliverMessage(msg._id)} color="#059669" />
+                        </TD>
                       </tr>
                     );
                   })}

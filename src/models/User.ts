@@ -20,6 +20,13 @@ export interface IUser extends Document {
   pendingFriendRequests: mongoose.Types.ObjectId[]; // requests received
   sentFriendRequests: mongoose.Types.ObjectId[];    // requests sent
   role: 'user' | 'admin';
+  location?: {
+    city: string;
+    lat: number;
+    lng: number;
+    updatedAt?: Date;
+  };
+  hasCompletedOnboarding?: boolean;
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -47,6 +54,13 @@ const UserSchema: Schema = new Schema(
     pendingFriendRequests: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     sentFriendRequests: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    location: {
+      city: { type: String, default: 'Ismeretlen Dúc' },
+      lat: { type: Number, default: 47.4979 },
+      lng: { type: Number, default: 19.0402 },
+      updatedAt: { type: Date, default: Date.now },
+    },
+    hasCompletedOnboarding: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
   },

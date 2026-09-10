@@ -30,8 +30,8 @@ export async function GET(req: NextRequest) {
 
     const messagesRaw = await Message.find(query)
       .sort({ createdAt: -1 })
-      .populate('senderId', 'username avatar')
-      .populate('recipientId', 'username avatar')
+      .populate('senderId', 'username avatar location')
+      .populate('recipientId', 'username avatar location')
       .lean();
 
     const now = new Date();

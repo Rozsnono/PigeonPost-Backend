@@ -22,7 +22,7 @@ export async function GET(
     await connectToDatabase();
 
     const [user, pigeonCount] = await Promise.all([
-      User.findById(id).select('username avatar level stats createdAt friends').lean(),
+      User.findById(id).select('username avatar level stats createdAt friends location').lean(),
       Pigeon.countDocuments({ ownerId: id }),
     ]);
 
@@ -40,6 +40,7 @@ export async function GET(
           avatar: user.avatar,
           level: user.level,
           stats: user.stats || { sentCount: 0, receivedCount: 0, maxDistance: 0 },
+          location: (user as any).location,
           createdAt: user.createdAt,
           pigeonCount,
           isFriend,

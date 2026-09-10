@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
+import { createLog } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Delete user (soft delete)
+// Delete user (supports soft delete and permanent delete)
 export async function DELETE(req: NextRequest) {
   try {
     const adminSecret = process.env.ADMIN_SECRET;
@@ -34,13 +35,23 @@ export async function DELETE(req: NextRequest) {
 
     await connectToDatabase();
     
-    await User.findByIdAndUpdate(userId, { 
-      isDeleted: true, 
-      deletedAt: new Date() 
-    });
+    const user = await User.findById(userId);
+    if (!user) return NextResponse.json({ error: 'Felhasználó nem található' }, { status: 404 });
 
-    return NextResponse.json({ success: true });
+    const permanent = searchParams.get('permanent') === 'true';
+    if (permanent) {
+      await User.findByIdAndDelete(userId);
+      await createLog('warn', 'Admin', `Felhasználó véglegesen törölve: ${user.username} (${user.email})`, { userId });
+    } else {
+      user.isDeleted = true;
+      user.deletedAt = new Date();
+      await user.save();
+      await createLog('warn', 'Admin', `Felhasználó archiválva/törölve: ${user.username} (${user.email})`, { userId });
+    }
+
+    return NextResponse.json({ success: true, message: `${user.username} sikeresen törölve.` });
   } catch (error) {
+    console.error('DELETE /api/admin/users error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
 }

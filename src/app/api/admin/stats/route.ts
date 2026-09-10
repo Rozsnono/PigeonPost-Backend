@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     const seedEconomy = userStats.length > 0 ? userStats[0].totalSeeds : 0;
 
     // Fetch recent logs
-    const recentLogs = await Log.find().sort({ createdAt: -1 }).limit(10).lean();
+    const recentLogs = await Log.find().sort({ createdAt: -1 }).limit(25).lean();
 
     // Format logs for the frontend
     const formattedLogs = recentLogs.map(log => ({
