@@ -57,7 +57,7 @@ const UserSchema: Schema = new Schema(
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     expoPushToken: { type: String, default: null },
     location: {
-      city: { type: String, default: 'Ismeretlen Dúc' },
+      city: { type: String, default: 'Budapest' },
       lat: { type: Number, default: 47.4979 },
       lng: { type: Number, default: 19.0402 },
       updatedAt: { type: Date, default: Date.now },

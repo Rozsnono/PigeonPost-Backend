@@ -53,7 +53,7 @@ export async function PATCH(req: NextRequest) {
 
     if (body.location) {
       updateFields.location = {
-        city: String(body.location.city || 'Ismeretlen Dúc'),
+        city: String(body.location.city || 'Budapest').trim().replace(/\s+Dúc$/i, ''),
         lat: Number(body.location.lat) || 47.4979,
         lng: Number(body.location.lng) || 19.0402,
         updatedAt: new Date(),
