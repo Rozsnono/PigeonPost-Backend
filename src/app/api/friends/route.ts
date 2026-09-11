@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
+import { sendPushToUser } from '@/lib/push';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
@@ -96,6 +97,14 @@ export async function POST(req: NextRequest) {
           sentFriendRequests: { $in: [authObjId, auth.userId] },
         },
       });
+      // Push notification to target that request was accepted
+      sendPushToUser(
+        target,
+        '🤝 Új Barát!',
+        `${me.username} elfogadta a barátkérésedet! Mostantól küldhettek egymásnak galambokat.`,
+        { type: 'friend_accepted', userId: auth.userId }
+      ).catch(() => {});
+
       return NextResponse.json({ message: 'Friend request accepted — you are now friends!' }, { status: 200, headers: CORS_HEADERS });
     }
 
@@ -111,6 +120,14 @@ export async function POST(req: NextRequest) {
       $addToSet: { pendingFriendRequests: authObjId },
       $pull: { sentFriendRequests: { $in: [authObjId, auth.userId] } },
     });
+
+    // Push notification to target about incoming request
+    sendPushToUser(
+      target,
+      '👥 Új Barátfelkérés!',
+      `${me.username} szeretne a barátod lenni a PigeonPost hálózatán!`,
+      { type: 'friend_request', userId: auth.userId }
+    ).catch(() => {});
 
     return NextResponse.json({ message: 'Friend request sent' }, { status: 201, headers: CORS_HEADERS });
   } catch (error) {

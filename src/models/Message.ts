@@ -30,6 +30,8 @@ export interface IMessage extends Document {
   recipientLocalTime: string; // Optional, might not know at dispatch
   pickupDeadline: Date; // When waiting_for_pickup, deadline before expiry
   isRead: boolean;
+  deliveredNotified?: boolean;
+  returnedNotified?: boolean;
 
   createdAt: Date;
   updatedAt: Date;
@@ -67,6 +69,8 @@ const MessageSchema: Schema = new Schema(
     pickupDeadline: { type: Date },
     isRead: { type: Boolean, default: false },
     isArchived: { type: Boolean, default: false },
+    deliveredNotified: { type: Boolean, default: false },
+    returnedNotified: { type: Boolean, default: false },
     returnDispatchedAt: { type: Date },
     returnEstimatedArrivalAt: { type: Date },
     returningStatus: { type: String, enum: ['idle', 'returning', 'held_by_recipient', 'returned'], default: 'idle' },

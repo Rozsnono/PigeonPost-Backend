@@ -68,6 +68,10 @@ export async function PATCH(req: NextRequest) {
       updateFields.avatar = body.avatar;
     }
 
+    if (body.expoPushToken !== undefined) {
+      updateFields.expoPushToken = typeof body.expoPushToken === 'string' ? body.expoPushToken : null;
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       auth.userId,
       { $set: updateFields },

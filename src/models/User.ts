@@ -20,6 +20,7 @@ export interface IUser extends Document {
   pendingFriendRequests: mongoose.Types.ObjectId[]; // requests received
   sentFriendRequests: mongoose.Types.ObjectId[];    // requests sent
   role: 'user' | 'admin';
+  expoPushToken?: string;
   location?: {
     city: string;
     lat: number;
@@ -54,6 +55,7 @@ const UserSchema: Schema = new Schema(
     pendingFriendRequests: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     sentFriendRequests: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    expoPushToken: { type: String, default: null },
     location: {
       city: { type: String, default: 'Ismeretlen Dúc' },
       lat: { type: Number, default: 47.4979 },
