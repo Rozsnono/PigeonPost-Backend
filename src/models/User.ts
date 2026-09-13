@@ -1,5 +1,28 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface IUserLanguage {
+  code: string;
+  name: string;
+  isNative?: boolean;
+}
+
+export interface IUserStamp {
+  id: string;
+  code: string;
+  name: string;
+  country: string;
+  count: number;
+  image?: string;
+  unlockedAt?: Date;
+}
+
+export interface IMessagePreferences {
+  replyPace: string;
+  messageLength: string;
+  writingAssistance: string;
+  hereFor: string;
+}
+
 export interface IUser extends Document {
   username: string;
   email: string;
@@ -17,8 +40,8 @@ export interface IUser extends Document {
     maxDistance: number;
   };
   friends: mongoose.Types.ObjectId[];
-  pendingFriendRequests: mongoose.Types.ObjectId[]; // requests received
-  sentFriendRequests: mongoose.Types.ObjectId[];    // requests sent
+  pendingFriendRequests: mongoose.Types.ObjectId[];
+  sentFriendRequests: mongoose.Types.ObjectId[];
   role: 'user' | 'admin';
   expoPushToken?: string;
   location?: {
@@ -28,6 +51,26 @@ export interface IUser extends Document {
     updatedAt?: Date;
   };
   hasCompletedOnboarding?: boolean;
+
+  // New profile, social and aviary fields
+  bio?: string;
+  birthday?: Date;
+  zodiac?: string;
+  gender?: string;
+  isLocationPrivate?: boolean;
+  languages?: IUserLanguage[];
+  interests?: string[];
+  messagePreferences?: IMessagePreferences;
+  gold: number;
+  stamps: IUserStamp[];
+  ownedBirds: string[];
+  activeBird: string;
+  openSkiesQuota: {
+    remaining: number;
+    max: number;
+    resetAt?: Date;
+  };
+
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -39,7 +82,7 @@ const UserSchema: Schema = new Schema(
     username: { type: String, required: true, unique: true },
     email: { type: String, required: true, unique: true, lowercase: true },
     passwordHash: { type: String, required: true },
-    avatar: { type: String, default: 'pigeon-basic' },
+    avatar: { type: String, default: 'feather' },
     level: { type: Number, default: 1 },
     inventory: {
       seeds: { type: Number, default: 10 },
@@ -63,6 +106,60 @@ const UserSchema: Schema = new Schema(
       updatedAt: { type: Date, default: Date.now },
     },
     hasCompletedOnboarding: { type: Boolean, default: false },
+
+    bio: { type: String, default: '' },
+    birthday: { type: Date, default: null },
+    zodiac: { type: String, default: '' },
+    gender: { type: String, default: 'Prefer not to say' },
+    isLocationPrivate: { type: Boolean, default: false },
+    languages: {
+      type: [
+        {
+          code: { type: String, required: true },
+          name: { type: String, required: true },
+          isNative: { type: Boolean, default: false },
+        },
+      ],
+      default: [{ code: 'hu', name: 'Hungarian', isNative: true }],
+    },
+    interests: { type: [String], default: [] },
+    messagePreferences: {
+      replyPace: { type: String, default: 'No preference' },
+      messageLength: { type: String, default: 'Any length' },
+      writingAssistance: { type: String, default: 'Prefer not to say' },
+      hereFor: { type: String, default: 'Friendship' },
+    },
+    gold: { type: Number, default: 5 },
+    stamps: {
+      type: [
+        {
+          id: { type: String, required: true },
+          code: { type: String, required: true },
+          name: { type: String, required: true },
+          country: { type: String, required: true },
+          count: { type: Number, default: 1 },
+          image: { type: String },
+          unlockedAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [
+        {
+          id: 'stamp_hu_01',
+          code: 'HU PP-01',
+          name: 'Budapest Parliament',
+          country: 'Hungary',
+          count: 1,
+        },
+      ],
+    },
+    ownedBirds: { type: [String], default: ['pigeon'] },
+    activeBird: { type: String, default: 'pigeon' },
+    openSkiesQuota: {
+      remaining: { type: Number, default: 20 },
+      max: { type: Number, default: 20 },
+      resetAt: { type: Date, default: Date.now },
+    },
+
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
   },

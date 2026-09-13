@@ -72,6 +72,81 @@ export async function PATCH(req: NextRequest) {
       updateFields.expoPushToken = typeof body.expoPushToken === 'string' ? body.expoPushToken : null;
     }
 
+    if (body.bio !== undefined) {
+      updateFields.bio = String(body.bio || '').slice(0, 500);
+    }
+
+    if (body.birthday) {
+      const bDate = new Date(body.birthday);
+      if (!isNaN(bDate.getTime())) {
+        updateFields.birthday = bDate;
+        const day = bDate.getDate();
+        const month = bDate.getMonth() + 1;
+        // Calculate zodiac sign
+        const zodiacSigns = [
+          { name: 'Capricorn', m: 1, d: 20 },
+          { name: 'Aquarius', m: 2, d: 19 },
+          { name: 'Pisces', m: 3, d: 21 },
+          { name: 'Aries', m: 4, d: 20 },
+          { name: 'Taurus', m: 5, d: 21 },
+          { name: 'Gemini', m: 6, d: 21 },
+          { name: 'Cancer', m: 7, d: 23 },
+          { name: 'Leo', m: 8, d: 23 },
+          { name: 'Virgo', m: 9, d: 23 },
+          { name: 'Libra', m: 10, d: 23 },
+          { name: 'Scorpio', m: 11, d: 22 },
+          { name: 'Sagittarius', m: 12, d: 22 },
+        ];
+        let sign = 'Capricorn';
+        for (const s of zodiacSigns) {
+          if (month === s.m && day < s.d) {
+            sign = s.name;
+            break;
+          }
+        }
+        updateFields.zodiac = body.zodiac || sign;
+      }
+    } else if (body.zodiac !== undefined) {
+      updateFields.zodiac = String(body.zodiac);
+    }
+
+    if (body.gender !== undefined) {
+      updateFields.gender = String(body.gender);
+    }
+
+    if (typeof body.isLocationPrivate === 'boolean') {
+      updateFields.isLocationPrivate = body.isLocationPrivate;
+    }
+
+    if (Array.isArray(body.languages)) {
+      updateFields.languages = body.languages.map((l: any) => ({
+        code: String(l.code || 'hu'),
+        name: String(l.name || 'Hungarian'),
+        isNative: Boolean(l.isNative),
+      }));
+    }
+
+    if (Array.isArray(body.interests)) {
+      updateFields.interests = body.interests.map(String).slice(0, 30);
+    }
+
+    if (body.messagePreferences && typeof body.messagePreferences === 'object') {
+      updateFields.messagePreferences = {
+        replyPace: String(body.messagePreferences.replyPace || 'No preference'),
+        messageLength: String(body.messagePreferences.messageLength || 'Any length'),
+        writingAssistance: String(body.messagePreferences.writingAssistance || 'Prefer not to say'),
+        hereFor: String(body.messagePreferences.hereFor || 'Friendship'),
+      };
+    }
+
+    if (body.activeBird && typeof body.activeBird === 'string') {
+      updateFields.activeBird = body.activeBird;
+    }
+
+    if (typeof body.gold === 'number') {
+      updateFields.gold = Math.max(0, body.gold);
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       auth.userId,
       { $set: updateFields },

@@ -32,6 +32,8 @@ export interface IMessage extends Document {
   isRead: boolean;
   deliveredNotified?: boolean;
   returnedNotified?: boolean;
+  isOpenSkies?: boolean;
+  attachedStampId?: string;
 
   createdAt: Date;
   updatedAt: Date;
@@ -75,7 +77,9 @@ const MessageSchema: Schema = new Schema(
     returnEstimatedArrivalAt: { type: Date },
     returningStatus: { type: String, enum: ['idle', 'returning', 'held_by_recipient', 'returned'], default: 'idle' },
     heldByAction: { type: String, enum: ['none', 'fed_seeds', 'caged'], default: 'none' },
-    heldUntil: { type: Date }
+    heldUntil: { type: Date },
+    isOpenSkies: { type: Boolean, default: false },
+    attachedStampId: { type: String, default: null }
   },
   {
     timestamps: true,
