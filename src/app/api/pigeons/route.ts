@@ -14,7 +14,20 @@ export async function GET(req: NextRequest) {
 
   try {
     await connectToDatabase();
-    const pigeons = await Pigeon.find({ ownerId: auth.userId }).lean();
+    let pigeons = await Pigeon.find({ ownerId: auth.userId }).lean();
+    if (pigeons.length === 0) {
+      const defaultPigeon = await Pigeon.create({
+        ownerId: auth.userId,
+        name: 'Barnaby',
+        identifier: `#${Math.floor(Math.random() * 9000) + 1000}`,
+        level: 1,
+        status: 'idle',
+        species: 'pigeon',
+        speedKmH: 80,
+        fatigue: 0,
+      });
+      pigeons = [defaultPigeon.toObject() as any];
+    }
     return NextResponse.json({ pigeons }, { status: 200, headers: CORS_HEADERS });
   } catch (error) {
     console.error('GET /api/pigeons error:', error);
