@@ -56,8 +56,9 @@ export interface IUser extends Document {
   bio?: string;
   birthday?: Date;
   zodiac?: string;
-  gender?: string;
   isLocationPrivate?: boolean;
+  pinColor?: string;
+  blockedUsers?: mongoose.Types.ObjectId[];
   languages?: IUserLanguage[];
   interests?: string[];
   messagePreferences?: IMessagePreferences;
@@ -112,6 +113,8 @@ const UserSchema: Schema = new Schema(
     zodiac: { type: String, default: '' },
     gender: { type: String, default: 'Prefer not to say' },
     isLocationPrivate: { type: Boolean, default: false },
+    pinColor: { type: String, default: '#818cf8' },
+    blockedUsers: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     languages: {
       type: [
         {

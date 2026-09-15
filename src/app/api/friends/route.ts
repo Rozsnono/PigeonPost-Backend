@@ -135,3 +135,44 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: CORS_HEADERS });
   }
 }
+
+// DELETE /api/friends — unfriend or block { targetUserId, action?: 'unfriend' | 'block' }
+export async function DELETE(req: NextRequest) {
+  const auth = verifyAuth(req);
+  if (!auth) return unauthorizedResponse();
+
+  try {
+    await connectToDatabase();
+    const { targetUserId, action = 'unfriend' } = await req.json();
+    if (!targetUserId) return NextResponse.json({ error: 'targetUserId required' }, { status: 400, headers: CORS_HEADERS });
+
+    const authObjId = new mongoose.Types.ObjectId(auth.userId);
+    const targetObjId = new mongoose.Types.ObjectId(targetUserId);
+
+    // Remove from friendship and pending requests on both sides
+    await Promise.all([
+      User.findByIdAndUpdate(authObjId, {
+        $pull: {
+          friends: { $in: [targetObjId, targetUserId] },
+          pendingFriendRequests: { $in: [targetObjId, targetUserId] },
+          sentFriendRequests: { $in: [targetObjId, targetUserId] },
+        },
+        ...(action === 'block' ? { $addToSet: { blockedUsers: targetObjId } } : {}),
+      }),
+      User.findByIdAndUpdate(targetObjId, {
+        $pull: {
+          friends: { $in: [authObjId, auth.userId] },
+          pendingFriendRequests: { $in: [authObjId, auth.userId] },
+          sentFriendRequests: { $in: [authObjId, auth.userId] },
+        },
+      }),
+    ]);
+
+    const message = action === 'block' ? 'User blocked and removed from friends' : 'Friend removed successfully';
+    return NextResponse.json({ message }, { status: 200, headers: CORS_HEADERS });
+  } catch (error) {
+    console.error('DELETE /api/friends error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: CORS_HEADERS });
+  }
+}
+

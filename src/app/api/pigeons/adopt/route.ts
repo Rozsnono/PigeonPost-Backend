@@ -11,7 +11,20 @@ export async function OPTIONS() {
 
 const adoptSchema = z.object({
   name: z.string().min(2).max(30),
+  species: z.string().optional().default('pigeon'),
 });
+
+const BIRD_BASE_SPEEDS: Record<string, number> = {
+  pigeon: 80,
+  turtle_dove: 88,
+  starling: 92,
+  raven: 96,
+  barn_owl: 102,
+  golden_eagle: 160,
+  peregrine: 170,
+  falcon_express: 240,
+  phoenix_express: 300,
+};
 
 const ADOPTION_COST = 500;
 
@@ -24,15 +37,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const validation = adoptSchema.safeParse(body);
     if (!validation.success) {
-      return NextResponse.json({ error: 'Invalid data' }, { status: 400, headers: CORS_HEADERS });
+      return NextResponse.json({ error: 'Invalid data', details: validation.error.issues }, { status: 400, headers: CORS_HEADERS });
     }
 
-    const { name } = validation.data;
+    const { name, species } = validation.data;
     const user = await User.findById(auth.userId);
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
 
     if (user.inventory.seeds < ADOPTION_COST) {
-      return NextResponse.json({ error: `Not enough seeds. Need ${ADOPTION_COST}, have ${user.inventory.seeds}.` }, { status: 400, headers: CORS_HEADERS });
+      return NextResponse.json({ error: `Nincs elég magod. Szükséges: ${ADOPTION_COST}, rendelkezel: ${user.inventory.seeds}.` }, { status: 400, headers: CORS_HEADERS });
     }
 
     // Deduct seeds and create pigeon atomically
@@ -40,10 +53,14 @@ export async function POST(req: NextRequest) {
     await user.save();
 
     const identifier = `#${Math.floor(Math.random() * 9000) + 1000}`;
+    const speed = BIRD_BASE_SPEEDS[species] || 80;
+
     const pigeon = await Pigeon.create({
       ownerId: auth.userId,
       name,
       identifier,
+      species,
+      speedKmH: speed,
       level: 1,
       status: 'idle',
       fatigue: 0,

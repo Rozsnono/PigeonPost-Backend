@@ -147,6 +147,10 @@ export async function PATCH(req: NextRequest) {
       updateFields.gold = Math.max(0, body.gold);
     }
 
+    if (body.pinColor && typeof body.pinColor === 'string') {
+      updateFields.pinColor = body.pinColor;
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       auth.userId,
       { $set: updateFields },

@@ -49,8 +49,23 @@ export async function GET(req: NextRequest) {
     const language = searchParams.get('language')?.trim() || '';
     const interest = searchParams.get('interest')?.trim() || '';
 
+    const excludedIds: any[] = [auth.userId];
+    if (me.friends && Array.isArray(me.friends)) {
+      me.friends.forEach((id: any) => excludedIds.push(id));
+    }
+    if (me.sentFriendRequests && Array.isArray(me.sentFriendRequests)) {
+      me.sentFriendRequests.forEach((id: any) => excludedIds.push(id));
+    }
+    if (me.pendingFriendRequests && Array.isArray(me.pendingFriendRequests)) {
+      me.pendingFriendRequests.forEach((id: any) => excludedIds.push(id));
+    }
+    if (me.blockedUsers && Array.isArray(me.blockedUsers)) {
+      me.blockedUsers.forEach((id: any) => excludedIds.push(id));
+    }
+
     const filter: any = {
-      _id: { $ne: auth.userId },
+      _id: { $nin: excludedIds },
+      blockedUsers: { $ne: auth.userId },
       isDeleted: false,
     };
 
