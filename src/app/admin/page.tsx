@@ -20,6 +20,7 @@ const I = {
   Check: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
   Activity: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
   Zap: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+  Gold: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v8"/><path d="M10 10h4"/><path d="M10 14h4"/></svg>,
 };
 
 type Tab = 'overview' | 'users' | 'pigeons' | 'messages' | 'activity';
@@ -84,6 +85,15 @@ const btn = (v: 'primary'|'ghost'|'danger'|'success'|'warning') => {
   const co = { primary: '#818cf8', ghost: '#94a3b8', danger: '#f87171', success: '#34d399', warning: '#fbbf24' }[v];
   const bo = { primary: 'rgba(99,102,241,0.3)', ghost: 'rgba(255,255,255,0.09)', danger: 'rgba(239,68,68,0.3)', success: 'rgba(16,185,129,0.3)', warning: 'rgba(245,158,11,0.3)' }[v];
   return { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', background: bg, color: co, border: `1px solid ${bo}`, borderRadius: 7, fontWeight: 600, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' as const };
+};
+
+// Special gold button style – distinct amber/gold look
+const btnGold: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px',
+  background: 'rgba(245,158,11,0.18)',
+  color: '#f59e0b',
+  border: '1px solid rgba(245,158,11,0.45)',
+  borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
 const th: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.7px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' };
@@ -428,6 +438,7 @@ export default function AdminDashboard() {
                           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' as const }}>
                             <button style={btn('success')} onClick={() => giveItem('/api/admin/users/seeds', u._id, u.username, 'mag')}><I.Seed />Mag</button>
                             <button style={btn('warning')} onClick={() => giveItem('/api/admin/users/cages', u._id, u.username, 'kalitka')}><I.Gift />Kalitka</button>
+                            <button style={btnGold} onClick={() => giveItem('/api/admin/users/gold', u._id, u.username, 'arany')}><I.Gold />Arany</button>
                             <button style={btn('ghost')} onClick={() => banUser(u._id, u.username)}><I.Ban /></button>
                             <button style={btn('danger')} onClick={() => deleteUser(u._id, u.username)}><I.Trash /></button>
                           </div>
