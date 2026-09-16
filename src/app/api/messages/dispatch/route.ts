@@ -107,6 +107,16 @@ export async function POST(req: NextRequest) {
       { messageId: message._id, senderId: auth.userId, recipientId, pigeonId }
     );
 
+    // Értesítés küldése a fogadónak (nem blokkolja a válaszadást)
+    import('@/lib/push').then(({ sendPushToUser }) => {
+      sendPushToUser(
+        recipient,
+        '🕊️ Új madár érkezik!',
+        `${sender?.username || 'Valaki'} útnak indított feléd egy galambot!`,
+        { type: 'incoming_flight', messageId: message._id.toString() }
+      ).catch(console.error);
+    });
+
     return NextResponse.json({
       message: 'Letter dispatched!',
       flightDetails: {
