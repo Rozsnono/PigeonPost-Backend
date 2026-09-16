@@ -4,7 +4,10 @@ export interface IMessage extends Document {
   senderId: mongoose.Types.ObjectId;
   recipientId: mongoose.Types.ObjectId;
   pigeonId: mongoose.Types.ObjectId;
-  content: string; // Max 500 chars
+  pigeonIds?: mongoose.Types.ObjectId[];
+  isFlock?: boolean;
+  flockSize?: number;
+  content: string; // Max flockSize * 500 chars
   status: 'flying' | 'delivered' | 'waiting_for_pickup' | 'expired_lost' | 'returned_to_sender';
   
   // Coordinates for distance calculations
@@ -44,7 +47,10 @@ const MessageSchema: Schema = new Schema(
     senderId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     recipientId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     pigeonId: { type: Schema.Types.ObjectId, ref: 'Pigeon', required: true },
-    content: { type: String, required: true, maxlength: 500 },
+    pigeonIds: [{ type: Schema.Types.ObjectId, ref: 'Pigeon' }],
+    isFlock: { type: Boolean, default: false },
+    flockSize: { type: Number, default: 1 },
+    content: { type: String, required: true, maxlength: 15000 },
     status: {
       type: String,
       enum: ['flying', 'delivered', 'waiting_for_pickup', 'expired_lost', 'returned_to_sender'],
