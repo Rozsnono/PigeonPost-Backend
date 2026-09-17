@@ -111,6 +111,44 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      // Auto-return handling for delivered messages:
+      // If delivered for more than 2 hours without return dispatched, settle as returned
+      // If delivered for more than 5 minutes without return dispatched, start return flight
+      if (m.status === 'delivered' && m.returningStatus === 'idle' && m.estimatedArrivalAt) {
+        const arrivalTime = new Date(m.estimatedArrivalAt).getTime();
+        const deliveredElapsedMs = now.getTime() - arrivalTime;
+        if (deliveredElapsedMs > 2 * 3600 * 1000) {
+          m.returningStatus = 'returned';
+          Message.findByIdAndUpdate(m._id, { returningStatus: 'returned' }).exec();
+          if (m.pigeonIds && m.pigeonIds.length > 0) {
+            const pids = m.pigeonIds.map((p: any) => p._id || p);
+            Pigeon.updateMany({ _id: { $in: pids } }, { status: 'idle' }).exec();
+          } else if (m.pigeonId?._id || m.pigeonId) {
+            const pid = m.pigeonId?._id || m.pigeonId;
+            Pigeon.findByIdAndUpdate(pid, { status: 'idle' }).exec();
+          }
+        } else if (deliveredElapsedMs > 5 * 60 * 1000) {
+          const returnDurationMinutes = Math.max(1, Math.round((m.flightDurationMinutes || 10) / 2));
+          m.returningStatus = 'returning';
+          m.returnDispatchedAt = now;
+          m.returnEstimatedArrivalAt = new Date(now.getTime() + returnDurationMinutes * 60000);
+
+          Message.findByIdAndUpdate(m._id, {
+            returningStatus: 'returning',
+            returnDispatchedAt: m.returnDispatchedAt,
+            returnEstimatedArrivalAt: m.returnEstimatedArrivalAt,
+          }).exec();
+
+          if (m.pigeonIds && m.pigeonIds.length > 0) {
+            const pids = m.pigeonIds.map((p: any) => p._id || p);
+            Pigeon.updateMany({ _id: { $in: pids } }, { status: 'returning' }).exec();
+          } else if (m.pigeonId?._id || m.pigeonId) {
+            const pid = m.pigeonId?._id || m.pigeonId;
+            Pigeon.findByIdAndUpdate(pid, { status: 'returning' }).exec();
+          }
+        }
+      }
+
       // If incoming message is still flying, HIDE sender identity until delivered/opened
       if (isRecipient && m.status === 'flying') {
         return {

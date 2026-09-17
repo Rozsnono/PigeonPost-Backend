@@ -80,6 +80,43 @@ export async function checkFlightStatuses() {
       }
     }
 
+    // Auto-dispatch returning flight for pigeons delivered > 5 mins ago with returningStatus === 'idle'
+    const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000);
+    const twoHoursAgo = new Date(now.getTime() - 2 * 3600 * 1000);
+
+    await Message.updateMany(
+      {
+        status: 'delivered',
+        returningStatus: 'idle',
+        estimatedArrivalAt: { $lte: twoHoursAgo },
+      },
+      { returningStatus: 'returned' }
+    );
+
+    const pendingReturnMessages = await Message.find({
+      status: 'delivered',
+      returningStatus: 'idle',
+      estimatedArrivalAt: { $lte: fiveMinAgo, $gt: twoHoursAgo },
+    }).lean();
+
+    for (const m of pendingReturnMessages) {
+      const returnDurationMinutes = Math.max(1, Math.round((m.flightDurationMinutes || 10) / 2));
+      const returnDispatchedAt = now;
+      const returnEstimatedArrivalAt = new Date(now.getTime() + returnDurationMinutes * 60000);
+
+      await Message.findByIdAndUpdate(m._id, {
+        returningStatus: 'returning',
+        returnDispatchedAt,
+        returnEstimatedArrivalAt,
+      });
+
+      if (m.pigeonIds && m.pigeonIds.length > 0) {
+        await Pigeon.updateMany({ _id: { $in: m.pigeonIds } }, { status: 'returning' });
+      } else if (m.pigeonId) {
+        await Pigeon.findByIdAndUpdate(m.pigeonId, { status: 'returning' });
+      }
+    }
+
     // 2. Returning pigeons that arrived back home at sender's loft (returning -> returned, pigeon status -> idle)
     const returningMessages = await Message.find({
       returningStatus: 'returning',
