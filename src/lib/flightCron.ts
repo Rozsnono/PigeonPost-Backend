@@ -28,14 +28,16 @@ export async function checkFlightStatuses() {
       status: 'flying',
       estimatedArrivalAt: { $lte: now },
     })
-      .populate('senderId', 'username location')
+      .populate('senderId', 'username location expoPushToken')
       .populate('recipientId', 'username expoPushToken')
+      .populate('pigeonId', 'name identifier species')
       .lean();
 
     for (const m of arrivingMessages) {
       await Message.findByIdAndUpdate(m._id, {
         status: 'delivered',
         deliveredNotified: true,
+        senderDeliveredNotified: true,
       });
 
       deliveredCount++;
@@ -45,14 +47,34 @@ export async function checkFlightStatuses() {
         const sender = m.senderId as any;
         const senderName = sender?.username || 'Egy ismerősöd';
         const originCity = sender?.location?.city || 'Ismeretlen város';
+        const birdText = m.isFlock ? `Egy ${m.flockSize || 1} madárból álló raj` : 'Egy futárgalamb';
 
         await sendPushToUser(
           recipient,
           '📬 Új galamb landolt a dúcban!',
-          `${senderName} levelet küldött neked (${originCity} felől). Nyisd meg a postaládádat!`,
+          `${senderName} levelet küldött neked (${originCity} felől). ${birdText} érkezett meg!`,
           { type: 'letter_delivered', messageId: m._id }
         ).catch((err) => {
           console.warn('[checkFlightStatuses] Push to recipient failed:', err);
+        });
+      }
+
+      if (m.senderId && typeof m.senderId === 'object' && (m.senderId as any).expoPushToken) {
+        const sender = m.senderId as any;
+        const recipient = m.recipientId as any;
+        const recipientName = recipient?.username || 'Címzett';
+        const title = m.isFlock ? '🦅 A madárraj célba ért!' : '🕊️ A galambod odaért!';
+        const body = m.isFlock
+          ? `A ${m.flockSize || 1} madárból álló raj sikeresen átadta a levelet ${recipientName} dúcában!`
+          : `${(m.pigeonId as any)?.name || 'A galambod'} sikeresen odaért a levéllel ${recipientName} dúcába!`;
+
+        await sendPushToUser(
+          sender,
+          title,
+          body,
+          { type: 'letter_delivered_sender', messageId: m._id }
+        ).catch((err) => {
+          console.warn('[checkFlightStatuses] Push to sender failed:', err);
         });
       }
     }
@@ -72,9 +94,13 @@ export async function checkFlightStatuses() {
         returnedNotified: true,
       });
 
-      const pid = (m.pigeonId as any)?._id || m.pigeonId;
-      if (pid) {
-        await Pigeon.findByIdAndUpdate(pid, { status: 'idle' });
+      if (m.pigeonIds && m.pigeonIds.length > 0) {
+        await Pigeon.updateMany({ _id: { $in: m.pigeonIds } }, { status: 'idle' });
+      } else {
+        const pid = (m.pigeonId as any)?._id || m.pigeonId;
+        if (pid) {
+          await Pigeon.findByIdAndUpdate(pid, { status: 'idle' });
+        }
       }
 
       returnedCount++;
@@ -82,7 +108,9 @@ export async function checkFlightStatuses() {
       if (m.senderId && typeof m.senderId === 'object' && (m.senderId as any).expoPushToken) {
         const sender = m.senderId as any;
         const pigeon = m.pigeonId as any;
-        const pigeonName = pigeon?.name || 'Postagalambod';
+        const pigeonName = m.isFlock 
+          ? `A(z) ${m.flockSize || 1} tagú madárrajod`
+          : (pigeon?.name || 'Postagalambod');
 
         await sendPushToUser(
           sender,

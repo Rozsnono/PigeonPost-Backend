@@ -71,8 +71,10 @@ export async function PATCH(
       message.returnDispatchedAt = now;
       message.returnEstimatedArrivalAt = new Date(now.getTime() + returnDurationMinutes * 60000);
 
-      // Update pigeon status to returning
-      if (message.pigeonId) {
+      // Update pigeon status to returning (handles both single birds and flocks)
+      if (message.pigeonIds && message.pigeonIds.length > 0) {
+        await Pigeon.updateMany({ _id: { $in: message.pigeonIds } }, { status: 'returning' });
+      } else if (message.pigeonId) {
         await Pigeon.findByIdAndUpdate(message.pigeonId, { status: 'returning' });
       }
     }

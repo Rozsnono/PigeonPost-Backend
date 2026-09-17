@@ -34,6 +34,7 @@ export interface IMessage extends Document {
   pickupDeadline: Date; // When waiting_for_pickup, deadline before expiry
   isRead: boolean;
   deliveredNotified?: boolean;
+  senderDeliveredNotified?: boolean;
   returnedNotified?: boolean;
   isOpenSkies?: boolean;
   attachedStampId?: string;
@@ -78,6 +79,7 @@ const MessageSchema: Schema = new Schema(
     isRead: { type: Boolean, default: false },
     isArchived: { type: Boolean, default: false },
     deliveredNotified: { type: Boolean, default: false },
+    senderDeliveredNotified: { type: Boolean, default: false },
     returnedNotified: { type: Boolean, default: false },
     returnDispatchedAt: { type: Date },
     returnEstimatedArrivalAt: { type: Date },

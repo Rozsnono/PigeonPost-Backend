@@ -33,7 +33,8 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: -1 })
       .populate('senderId', 'username avatar location expoPushToken')
       .populate('recipientId', 'username avatar location expoPushToken')
-      .populate('pigeonId', 'name identifier status')
+      .populate('pigeonId', 'name identifier species status level speedKmH')
+      .populate('pigeonIds', 'name identifier species status level speedKmH')
       .lean();
 
     const now = new Date();
@@ -46,14 +47,20 @@ export async function GET(req: NextRequest) {
       if (m.returningStatus === 'returning' && m.returnEstimatedArrivalAt && new Date(m.returnEstimatedArrivalAt) <= now) {
         m.returningStatus = 'returned';
         Message.findByIdAndUpdate(m._id, { returningStatus: 'returned', returnedNotified: true }).exec();
-        if (m.pigeonId?._id || m.pigeonId) {
+        
+        if (m.pigeonIds && m.pigeonIds.length > 0) {
+          const pids = m.pigeonIds.map((p: any) => p._id || p);
+          Pigeon.updateMany({ _id: { $in: pids } }, { status: 'idle' }).exec();
+        } else if (m.pigeonId?._id || m.pigeonId) {
           const pid = m.pigeonId?._id || m.pigeonId;
           Pigeon.findByIdAndUpdate(pid, { status: 'idle' }).exec();
         }
 
         // Push notification to sender that their pigeon returned home!
         if (!m.returnedNotified && m.senderId?.expoPushToken) {
-          const pigeonName = m.pigeonId?.name || 'Postagalambod';
+          const pigeonName = m.isFlock 
+            ? `A(z) ${m.flockSize || 1} tagú madárrajod` 
+            : (m.pigeonId?.name || 'Postagalambod');
           sendPushToUser(
             m.senderId,
             '🕊️ A galambod hazaért!',
@@ -66,17 +73,33 @@ export async function GET(req: NextRequest) {
       // Auto-arrive delivered messages if time reached
       if (m.status === 'flying' && new Date(m.estimatedArrivalAt) <= now) {
         m.status = 'delivered';
-        Message.findByIdAndUpdate(m._id, { status: 'delivered', deliveredNotified: true }).exec();
+        Message.findByIdAndUpdate(m._id, { status: 'delivered', deliveredNotified: true, senderDeliveredNotified: true }).exec();
 
         // Push notification to recipient that a new letter has arrived in their loft!
         if (!m.deliveredNotified && m.recipientId?.expoPushToken) {
           const senderName = m.senderId?.username || 'Egy ismerősöd';
           const originCity = m.senderId?.location?.city || 'Ismeretlen dúc';
+          const birdText = m.isFlock ? `Egy ${m.flockSize || 1} madárból álló raj` : 'Egy futárgalamb';
           sendPushToUser(
             m.recipientId,
             '📬 Új galamb landolt a dúcban!',
-            `${senderName} levelet küldött neked (${originCity} felől). Nyisd meg a postaládádat!`,
+            `${senderName} levelet küldött neked (${originCity} felől). ${birdText} érkezett meg!`,
             { type: 'letter_delivered', messageId: m._id }
+          ).catch(() => {});
+        }
+
+        // Push notification to sender that their letter was delivered!
+        if (!m.senderDeliveredNotified && m.senderId?.expoPushToken) {
+          const recipientName = m.recipientId?.username || 'Címzett';
+          const title = m.isFlock ? '🦅 A madárraj célba ért!' : '🕊️ A galambod odaért!';
+          const body = m.isFlock
+            ? `A ${m.flockSize || 1} madárból álló raj sikeresen átadta a levelet ${recipientName} dúcában!`
+            : `${m.pigeonId?.name || 'A galambod'} sikeresen odaért a levéllel ${recipientName} dúcába!`;
+          sendPushToUser(
+            m.senderId,
+            title,
+            body,
+            { type: 'letter_delivered_sender', messageId: m._id }
           ).catch(() => {});
         }
       }
