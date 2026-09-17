@@ -21,9 +21,13 @@ const I = {
   Activity: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
   Zap: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
   Gold: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v8"/><path d="M10 10h4"/><path d="M10 14h4"/></svg>,
+  Feather: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>,
+  Plus: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  Edit: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
+  Upload: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
 };
 
-type Tab = 'overview' | 'users' | 'pigeons' | 'messages' | 'activity';
+type Tab = 'overview' | 'users' | 'pigeons' | 'species' | 'messages' | 'activity';
 
 const C = {
   purple: '#818cf8', blue: '#60a5fa', green: '#34d399', red: '#f87171', yellow: '#fbbf24', amber: '#fbbf24'
@@ -106,6 +110,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [pigeons, setPigeons] = useState<any[]>([]);
+  const [speciesList, setSpeciesList] = useState<any[]>([]);
   const [msgs, setMsgs] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
@@ -117,6 +122,24 @@ export default function AdminDashboard() {
   const [spinning, setSpinning] = useState(false);
   const [now, setNow] = useState(new Date());
 
+  // Species Modal & Form State
+  const [speciesModal, setSpeciesModal] = useState<'add' | 'edit' | null>(null);
+  const [editingSpecies, setEditingSpecies] = useState<any>(null);
+  const [speciesForm, setSpeciesForm] = useState({
+    speciesId: '',
+    name: '',
+    subtitle: '',
+    speedKmH: 80,
+    priceGold: 0,
+    minLevel: 1,
+    requirementText: '',
+    avatarBase64: '',
+    flyingBase64: '',
+    sizeRank: 1,
+    isActive: true,
+  });
+  const [speciesSaving, setSpeciesSaving] = useState(false);
+
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
   const hdr = useCallback(() => ({ Authorization: `Bearer ${secret}` }), [secret]);
@@ -125,6 +148,7 @@ export default function AdminDashboard() {
   const fetchStats   = useCallback(async () => { try { const r = await fetch('/api/admin/stats',   { headers: hdr() }); if (r.ok) setStats(await r.json()); } catch {} }, [hdr]);
   const fetchUsers   = useCallback(async () => { try { const r = await fetch('/api/admin/users',   { headers: hdr() }); if (r.ok) setUsers(await r.json()); } catch {} }, [hdr]);
   const fetchPigeons = useCallback(async () => { try { const r = await fetch('/api/admin/flights', { headers: hdr() }); if (r.ok) setPigeons(await r.json()); } catch {} }, [hdr]);
+  const fetchSpecies = useCallback(async () => { try { const r = await fetch('/api/admin/species', { headers: hdr() }); if (r.ok) setSpeciesList(await r.json()); } catch {} }, [hdr]);
   const fetchMsgs    = useCallback(async () => { try { const r = await fetch('/api/admin/messages',{ headers: hdr() }); if (r.ok) setMsgs(await r.json()); } catch {} }, [hdr]);
 
   const login = async (e: React.FormEvent) => {
@@ -138,6 +162,7 @@ export default function AdminDashboard() {
     if (tab === 'overview' || tab === 'activity') fetchStats();
     if (tab === 'users') fetchUsers();
     if (tab === 'pigeons') fetchPigeons();
+    if (tab === 'species') fetchSpecies();
     if (tab === 'messages') fetchMsgs();
   }, [tab, authed]);
 
@@ -146,8 +171,137 @@ export default function AdminDashboard() {
     if (tab === 'overview' || tab === 'activity') await fetchStats();
     if (tab === 'users') await fetchUsers();
     if (tab === 'pigeons') await fetchPigeons();
+    if (tab === 'species') await fetchSpecies();
     if (tab === 'messages') await fetchMsgs();
     setTimeout(() => setSpinning(false), 500);
+  };
+
+  // Client-side Canvas Image Compression to Base64
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, field: 'avatarBase64' | 'flyingBase64') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const isFlying = field === 'flyingBase64';
+    const maxWidth = isFlying ? 160 : 400;
+    const maxHeight = isFlying ? 160 : 400;
+    const format = isFlying ? 'image/png' : 'image/jpeg';
+    const quality = 0.85;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL(format, quality);
+        setSpeciesForm((prev) => ({ ...prev, [field]: dataUrl }));
+        toast$(`✓ ${isFlying ? 'Repülő kép' : 'Profilkép'} betöltve & tömörítve (${Math.round(dataUrl.length / 1024)} KB)`);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const openAddSpecies = () => {
+    setEditingSpecies(null);
+    setSpeciesForm({
+      speciesId: '',
+      name: '',
+      subtitle: '',
+      speedKmH: 80,
+      priceGold: 0,
+      minLevel: 1,
+      requirementText: '',
+      avatarBase64: '',
+      flyingBase64: '',
+      sizeRank: 1,
+      isActive: true,
+    });
+    setSpeciesModal('add');
+  };
+
+  const openEditSpecies = (spec: any) => {
+    setEditingSpecies(spec);
+    setSpeciesForm({
+      speciesId: spec.speciesId,
+      name: spec.name,
+      subtitle: spec.subtitle || '',
+      speedKmH: spec.speedKmH,
+      priceGold: spec.priceGold,
+      minLevel: spec.minLevel || 1,
+      requirementText: spec.requirementText || '',
+      avatarBase64: spec.avatarBase64 || '',
+      flyingBase64: spec.flyingBase64 || '',
+      sizeRank: spec.sizeRank || 1,
+      isActive: spec.isActive !== false,
+    });
+    setSpeciesModal('edit');
+  };
+
+  const saveSpecies = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSpeciesSaving(true);
+    try {
+      const isEdit = speciesModal === 'edit';
+      const url = '/api/admin/species';
+      const method = isEdit ? 'PUT' : 'POST';
+      const body = isEdit ? { ...speciesForm, _id: editingSpecies._id } : speciesForm;
+
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...hdr() },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (r.ok) {
+        toast$(isEdit ? `✓ ${speciesForm.name} módosítva` : `✓ ${speciesForm.name} hozzáadva`);
+        setSpeciesModal(null);
+        fetchSpecies();
+      } else {
+        toast$(`✗ ${data.error || 'Mentési hiba'}`);
+      }
+    } catch {
+      toast$('✗ Hálózati hiba');
+    } finally {
+      setSpeciesSaving(false);
+    }
+  };
+
+  const toggleSpeciesActive = async (speciesId: string, currentActive: boolean) => {
+    const r = await fetch(`/api/admin/species?speciesId=${speciesId}`, { method: 'DELETE', headers: hdr() });
+    if (r.ok) {
+      toast$(`✓ Fajta ${currentActive ? 'inaktiválva' : 'aktiválva'}`);
+      fetchSpecies();
+    } else {
+      toast$('✗ Módosítás sikertelen');
+    }
+  };
+
+  const deleteSpeciesPermanent = async (speciesId: string, name: string) => {
+    if (!confirm(`Véglegesen törlöd „${name}" fajtát? (Csak akkor törölhető, ha 0 felhasználó birtokolja)`)) return;
+    const r = await fetch(`/api/admin/species?speciesId=${speciesId}&permanent=true`, { method: 'DELETE', headers: hdr() });
+    const d = await r.json();
+    if (r.ok) {
+      toast$(`✓ ${name} véglegesen törölve`);
+      fetchSpecies();
+    } else {
+      toast$(`✗ ${d.error || 'Törlés sikertelen'}`);
+    }
   };
 
   const giveItem = async (ep: string, uid: string, uname: string, label: string) => {
@@ -204,6 +358,12 @@ export default function AdminDashboard() {
     return pigeons.filter(p => p.name?.toLowerCase().includes(q) || p.ownerId?.username?.toLowerCase().includes(q));
   }, [pigeons, search]);
 
+  const filteredSpecies = useMemo(() => {
+    if (!search) return speciesList;
+    const q = search.toLowerCase();
+    return speciesList.filter(s => s.name?.toLowerCase().includes(q) || s.speciesId?.toLowerCase().includes(q) || s.subtitle?.toLowerCase().includes(q));
+  }, [speciesList, search]);
+
   const sortToggle = (col: string) => { if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(col); setSortDir('desc'); } };
   const SortI = ({ col }: { col: string }) => sortBy !== col ? <span style={{ color: '#374151', marginLeft: 3 }}>⇅</span> : <span style={{ color: C.purple, marginLeft: 3 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
   const toggleRow = (id: string) => { const n = new Set(selected); n.has(id) ? n.delete(id) : n.add(id); setSelected(n); };
@@ -212,6 +372,7 @@ export default function AdminDashboard() {
     { id: 'overview',  label: 'Áttekintés',   Icon: I.Chart,    badge: undefined },
     { id: 'users',     label: 'Felhasználók', Icon: I.Users,    badge: stats?.stats?.activeUsers },
     { id: 'pigeons',   label: 'Galambok',     Icon: I.Pigeon,   badge: stats?.stats?.flyingPigeons },
+    { id: 'species',   label: 'Madárfajták',  Icon: I.Feather,  badge: speciesList.length },
     { id: 'messages',  label: 'Üzenetek',     Icon: I.Mail,     badge: msgs?.stats?.flyingMessages },
     { id: 'activity',  label: 'Aktivitás',    Icon: I.Activity, badge: undefined },
   ];
@@ -291,12 +452,17 @@ export default function AdminDashboard() {
         <header style={{ height: 58, background: 'rgba(11,15,26,0.85)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 22px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', margin: 0 }}>{navItems.find(n => n.id === tab)?.label}</h2>
-            {(tab === 'users' || tab === 'pigeons') && (
+            {(tab === 'users' || tab === 'pigeons' || tab === 'species') && (
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#475569', pointerEvents: 'none' }}><I.Search /></div>
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Keresés..."
                   style={{ padding: '7px 12px 7px 32px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 9, color: '#e2e8f0', fontSize: 13, outline: 'none', width: 210 }} />
               </div>
+            )}
+            {tab === 'species' && (
+              <button onClick={openAddSpecies} style={{ ...btn('primary'), padding: '7px 14px', fontSize: 13, fontWeight: 700, marginLeft: 4 }}>
+                <I.Plus />Új madárfajta
+              </button>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -496,6 +662,123 @@ export default function AdminDashboard() {
             </div>
           </>)}
 
+          {/* ══ SPECIES ════════════════════════════════════════════════════ */}
+          {tab === 'species' && (<>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 18 }}>
+              <StatCard title="Összes madárfaj" value={speciesList.length} Icon={I.Feather} color={C.purple} />
+              <StatCard title="Aktív fajták" value={speciesList.filter(s => s.isActive !== false).length} Icon={I.Check} color={C.green} />
+              <StatCard title="Leggyorsabb" value={speciesList.length ? Math.max(...speciesList.map(s => s.speedKmH || 0)) + ' km/h' : '—'} Icon={I.Flight} color={C.blue} />
+              <StatCard title="Legértékesebb" value={speciesList.length ? Math.max(...speciesList.map(s => s.priceGold || 0)).toLocaleString() + ' arany' : '—'} Icon={I.Gold} color={C.yellow} />
+            </div>
+
+            <div style={{ background: 'rgba(15,21,36,0.8)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden' }}>
+              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8' }}>🪶 Elérhető madárfajták ({filteredSpecies.length})</span>
+                <button onClick={openAddSpecies} style={{ ...btn('primary'), padding: '6px 14px', fontSize: 12, fontWeight: 700 }}>
+                  <I.Plus />Új madárfajta hozzáadása
+                </button>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' as const, fontSize: 13 }}>
+                  <thead>
+                    <tr>{['Képek','Fajta / Név','Sebesség','Ár (arany)','Követelmény','Raj Rang','Birtoklók','Állapot','Műveletek'].map(h => <th key={h} style={th}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {filteredSpecies.map((s: any) => (
+                      <tr key={s.speciesId} style={{ opacity: s.isActive === false ? 0.6 : 1 }}>
+                        <td style={td}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 38, height: 38, borderRadius: 10, background: '#1e293b', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
+                              {s.avatarBase64 ? (
+                                <img src={s.avatarBase64} alt={s.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <span style={{ fontSize: 16 }}>🐦</span>
+                              )}
+                            </div>
+                            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(99,102,241,0.15)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(99,102,241,0.3)' }} title="Térkép repülő ikon">
+                              {s.flyingBase64 ? (
+                                <img src={s.flyingBase64} alt="fly" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                              ) : (
+                                <span style={{ fontSize: 12, color: C.purple }}>✈️</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td style={td}>
+                          <div style={{ fontWeight: 700, color: '#f1f5f9' }}>{s.name}</div>
+                          <div style={{ fontSize: 11, fontFamily: 'monospace', color: C.purple }}>ID: {s.speciesId}</div>
+                          {s.subtitle && <div style={{ fontSize: 11, color: '#64748b' }}>{s.subtitle}</div>}
+                        </td>
+                        <td style={td}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, color: C.blue, background: 'rgba(96,165,250,0.15)' }}>
+                            <I.Flight />{s.speedKmH} km/h
+                          </span>
+                        </td>
+                        <td style={td}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, fontSize: 12, fontWeight: 800, color: s.priceGold > 0 ? '#f59e0b' : C.green, background: s.priceGold > 0 ? 'rgba(245,158,11,0.15)' : 'rgba(52,211,153,0.15)' }}>
+                            <I.Gold />{s.priceGold > 0 ? `${s.priceGold.toLocaleString()} arany` : 'Ingyenes'}
+                          </span>
+                        </td>
+                        <td style={td}>
+                          <div style={{ fontSize: 12, color: '#cbd5e1' }}>{s.requirementText || `${s.minLevel || 1}. szint`}</div>
+                          <span style={{ fontSize: 10, color: '#64748b' }}>Min. szint: {s.minLevel || 1}</span>
+                        </td>
+                        <td style={td}>
+                          <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 5, fontSize: 11, fontWeight: 700, color: '#a78bfa', background: 'rgba(167,139,250,0.15)' }}>
+                            Rang {s.sizeRank || 1}
+                          </span>
+                        </td>
+                        <td style={td}>
+                          <div style={{ fontSize: 12, color: '#e2e8f0', fontWeight: 600 }}>{s.ownersCount ?? 0} gazda</div>
+                          <div style={{ fontSize: 10, color: '#64748b' }}>{s.activeCarriersCount ?? 0} aktív postás</div>
+                        </td>
+                        <td style={td}>
+                          <button
+                            onClick={() => toggleSpeciesActive(s.speciesId, s.isActive !== false)}
+                            style={{
+                              border: 'none',
+                              background: s.isActive !== false ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                              color: s.isActive !== false ? C.green : C.red,
+                              padding: '4px 10px',
+                              borderRadius: 6,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {s.isActive !== false ? '✓ Aktív' : '✕ Inaktív'}
+                          </button>
+                        </td>
+                        <td style={td}>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button style={btn('ghost')} onClick={() => openEditSpecies(s)} title="Szerkesztés">
+                              <I.Edit /> Szerkeszt
+                            </button>
+                            <button
+                              style={btn('danger')}
+                              onClick={() => deleteSpeciesPermanent(s.speciesId, s.name)}
+                              title={s.ownersCount > 0 ? 'Nem törölhető, mert van gazdája' : 'Végleges törlés'}
+                              disabled={s.ownersCount > 0}
+                            >
+                              <I.Trash />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredSpecies.length === 0 && (
+                      <tr>
+                        <td colSpan={9} style={{ ...td, textAlign: 'center', color: '#374151', padding: '36px 16px' }}>
+                          {search ? `Nincs találat: "${search}"` : 'Nincs madárfajta feltöltve'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>)}
+
           {/* ══ MESSAGES ═══════════════════════════════════════════════════ */}
           {tab === 'messages' && (<>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 20 }}>
@@ -577,6 +860,211 @@ export default function AdminDashboard() {
 
         </main>
       </div>
+
+      {/* ══ SPECIES ADD / EDIT MODAL ══════════════════════════════════ */}
+      {speciesModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#0d1322', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 18, width: '100%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', padding: 26, boxShadow: '0 25px 60px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(99,102,241,0.2)', color: C.purple, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.Feather /></div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#f1f5f9' }}>
+                  {speciesModal === 'edit' ? `Madárfajta szerkesztése: ${editingSpecies?.name}` : 'Új madárfajta hozzáadása'}
+                </h3>
+              </div>
+              <button onClick={() => setSpeciesModal(null)} style={{ background: 'transparent', border: 'none', color: '#64748b', fontSize: 20, cursor: 'pointer' }}>✕</button>
+            </div>
+
+            <form onSubmit={saveSpecies}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>
+                    Azonosító (speciesId) *
+                  </label>
+                  <input
+                    required
+                    disabled={speciesModal === 'edit'}
+                    value={speciesForm.speciesId}
+                    onChange={(e) => setSpeciesForm({ ...speciesForm, speciesId: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
+                    placeholder="pl. snowy_owl"
+                    style={{ width: '100%', padding: '10px 12px', background: speciesModal === 'edit' ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 9, color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                  <span style={{ fontSize: 10, color: '#475569' }}>Kisbetűk és aláhúzás, pl: raven, eagle</span>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>
+                    Megjelenített név *
+                  </label>
+                  <input
+                    required
+                    value={speciesForm.name}
+                    onChange={(e) => setSpeciesForm({ ...speciesForm, name: e.target.value })}
+                    placeholder="pl. Hóbagoly"
+                    style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 9, color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>
+                  Alcím / Leírás
+                </label>
+                <input
+                  value={speciesForm.subtitle}
+                  onChange={(e) => setSpeciesForm({ ...speciesForm, subtitle: e.target.value })}
+                  placeholder="pl. Északi sarkvidéki vadász és hírnök"
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 9, color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>
+                    Sebesség (km/h) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={10}
+                    max={1000}
+                    value={speciesForm.speedKmH}
+                    onChange={(e) => setSpeciesForm({ ...speciesForm, speedKmH: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 9, color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>
+                    Ár (Arany) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={speciesForm.priceGold}
+                    onChange={(e) => setSpeciesForm({ ...speciesForm, priceGold: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 9, color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>
+                    Min. Szint
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={speciesForm.minLevel}
+                    onChange={(e) => setSpeciesForm({ ...speciesForm, minLevel: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 9, color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 20 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>
+                    Feltétel leírás szöveg
+                  </label>
+                  <input
+                    value={speciesForm.requirementText}
+                    onChange={(e) => setSpeciesForm({ ...speciesForm, requirementText: e.target.value })}
+                    placeholder="pl. 2,500 arany · 2. szint"
+                    style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 9, color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 6, textTransform: 'uppercase' as const, letterSpacing: '0.8px' }}>
+                    Raj-Rang (1-10)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={speciesForm.sizeRank}
+                    onChange={(e) => setSpeciesForm({ ...speciesForm, sizeRank: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 9, color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                </div>
+              </div>
+
+              {/* IMAGE UPLOAD SECTION */}
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <I.Upload /> Képek feltöltése (Kliensoldali Base64 tömörítéssel)
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  {/* Avatar Upload */}
+                  <div style={{ border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 12, padding: 14, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 8 }}>PROFILKÉP (AVATAR)</div>
+                    <div style={{ width: 80, height: 80, borderRadius: 16, background: '#161924', margin: '0 auto 10px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      {speciesForm.avatarBase64 ? (
+                        <img src={speciesForm.avatarBase64} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: 28 }}>🐦</span>
+                      )}
+                    </div>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'rgba(99,102,241,0.15)', color: C.purple, borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                      Fájl kiválasztása
+                      <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'avatarBase64')} style={{ display: 'none' }} />
+                    </label>
+                    {speciesForm.avatarBase64 && (
+                      <button type="button" onClick={() => setSpeciesForm({ ...speciesForm, avatarBase64: '' })} style={{ display: 'block', margin: '6px auto 0', background: 'none', border: 'none', color: C.red, fontSize: 11, cursor: 'pointer' }}>
+                        Törlés
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Flying Upload */}
+                  <div style={{ border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 12, padding: 14, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 8 }}>REPÜLŐ KÉP (TÉRKÉP IKON)</div>
+                    <div style={{ width: 80, height: 80, borderRadius: 16, background: 'rgba(99,102,241,0.1)', margin: '0 auto 10px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(99,102,241,0.3)' }}>
+                      {speciesForm.flyingBase64 ? (
+                        <img src={speciesForm.flyingBase64} alt="Flying" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                      ) : (
+                        <span style={{ fontSize: 24, color: C.purple }}>✈️</span>
+                      )}
+                    </div>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'rgba(99,102,241,0.15)', color: C.purple, borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                      Fájl kiválasztása
+                      <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'flyingBase64')} style={{ display: 'none' }} />
+                    </label>
+                    {speciesForm.flyingBase64 && (
+                      <button type="button" onClick={() => setSpeciesForm({ ...speciesForm, flyingBase64: '' })} style={{ display: 'block', margin: '6px auto 0', background: 'none', border: 'none', color: C.red, fontSize: 11, cursor: 'pointer' }}>
+                        Törlés
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#cbd5e1' }}>
+                  <input
+                    type="checkbox"
+                    checked={speciesForm.isActive}
+                    onChange={(e) => setSpeciesForm({ ...speciesForm, isActive: e.target.checked })}
+                  />
+                  Azonnal aktív és elérhető a dúcban
+                </label>
+
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button type="button" onClick={() => setSpeciesModal(null)} style={{ ...btn('ghost'), padding: '9px 16px', fontSize: 13 }}>
+                    Mégse
+                  </button>
+                  <button type="submit" disabled={speciesSaving} style={{ ...btn('primary'), padding: '9px 20px', fontSize: 13, fontWeight: 700 }}>
+                    {speciesSaving ? 'Mentés...' : 'Fajta mentése'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

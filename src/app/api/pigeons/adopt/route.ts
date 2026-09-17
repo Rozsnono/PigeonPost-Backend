@@ -4,7 +4,8 @@ import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 import { z } from 'zod';
-import { AVIARY_SPECIES } from '@/app/api/aviary/route';
+import { AVIARY_SPECIES, ensureDefaultSpecies } from '@/app/api/aviary/route';
+import BirdSpecies from '@/models/BirdSpecies';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
@@ -46,7 +47,11 @@ export async function POST(req: NextRequest) {
     const user = await User.findById(auth.userId);
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
 
-    const targetSpec = AVIARY_SPECIES.find((s) => s.id === species);
+    await ensureDefaultSpecies();
+    const dbSpec = await BirdSpecies.findOne({ speciesId: species, isActive: true }).lean();
+    const targetSpec = dbSpec
+      ? { speciesId: dbSpec.speciesId, name: dbSpec.name, speedKmH: dbSpec.speedKmH, priceGold: dbSpec.priceGold }
+      : AVIARY_SPECIES.find((s) => s.id === species);
     const requiredGold = targetSpec?.priceGold || 0;
 
     // Check gold if bird species has gold price

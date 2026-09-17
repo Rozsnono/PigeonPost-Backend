@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
+import BirdSpecies, { IBirdSpecies } from '@/models/BirdSpecies';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 
 export async function OPTIONS() {
@@ -11,86 +12,115 @@ export async function OPTIONS() {
 export const AVIARY_SPECIES = [
   {
     id: 'pigeon',
-    name: 'Pigeon',
+    name: 'Postagalamb',
     speedKmH: 80,
     priceGold: 0,
     subtitle: 'Hűséges postagalamb',
     requirementText: 'Alapértelmezett',
     minLevel: 1,
+    sizeRank: 1,
   },
   {
     id: 'turtle_dove',
-    name: 'Turtle Dove',
+    name: 'Balkáni gerle',
     speedKmH: 88,
     priceGold: 750,
     subtitle: 'Békés balkáni gerle',
     requirementText: '750 arany',
     minLevel: 1,
+    sizeRank: 2,
   },
   {
     id: 'starling',
-    name: 'Starling',
+    name: 'Seregély',
     speedKmH: 92,
     priceGold: 1100,
     subtitle: 'Fürge seregély',
-    requirementText: 'Reach Starling Circle',
+    requirementText: 'Seregély Kör elérése',
     minLevel: 2,
+    sizeRank: 2,
   },
   {
     id: 'raven',
-    name: 'Raven',
+    name: 'Holló',
     speedKmH: 96,
     priceGold: 950,
     subtitle: 'Bölcs északi holló',
     requirementText: '950 arany',
     minLevel: 2,
+    sizeRank: 3,
   },
   {
     id: 'barn_owl',
-    name: 'Barn Owl',
+    name: 'Gyöngybagoly',
     speedKmH: 102,
     priceGold: 1400,
     subtitle: 'Éjjeli nesztelen gyöngybagoly',
     requirementText: '1,400 arany',
     minLevel: 3,
+    sizeRank: 4,
   },
   {
     id: 'golden_eagle',
-    name: 'Golden Eagle',
+    name: 'Szirti sas',
     speedKmH: 160,
     priceGold: 7800,
     subtitle: 'Királyi szirti sas',
-    requirementText: 'Reach Golden Current',
+    requirementText: 'Sasfészek tagság',
     minLevel: 4,
+    sizeRank: 7,
   },
   {
     id: 'peregrine',
-    name: 'Peregrine',
+    name: 'Vándorsólyom',
     speedKmH: 170,
     priceGold: 12000,
     subtitle: 'A világ leggyorsabb vándorsólyma',
     requirementText: '12,000 arany',
     minLevel: 5,
+    sizeRank: 6,
   },
   {
     id: 'falcon_express',
-    name: 'Falcon Express',
+    name: 'Sólyom Expressz',
     speedKmH: 240,
     priceGold: 25000,
     subtitle: 'Birodalmi expressz futár',
-    requirementText: 'Journey pack',
+    requirementText: 'Birodalmi rang',
     minLevel: 5,
+    sizeRank: 8,
   },
   {
     id: 'phoenix_express',
-    name: 'Phoenix Express',
+    name: 'Főnix Expressz',
     speedKmH: 300,
     priceGold: 50000,
     subtitle: 'Misztikus főnix villámrepülés',
-    requirementText: 'Journey pack',
+    requirementText: 'Legenda elérése',
     minLevel: 6,
+    sizeRank: 10,
   },
 ];
+
+export async function ensureDefaultSpecies() {
+  const count = await BirdSpecies.countDocuments();
+  if (count === 0) {
+    console.log('[BirdSpecies] Seeding default 9 species into MongoDB...');
+    for (const spec of AVIARY_SPECIES) {
+      await BirdSpecies.create({
+        speciesId: spec.id,
+        name: spec.name,
+        speedKmH: spec.speedKmH,
+        priceGold: spec.priceGold,
+        subtitle: spec.subtitle,
+        requirementText: spec.requirementText,
+        minLevel: spec.minLevel,
+        sizeRank: spec.sizeRank,
+        isActive: true,
+      });
+    }
+  }
+}
 
 export async function GET(req: NextRequest) {
   const auth = verifyAuth(req);
@@ -98,18 +128,33 @@ export async function GET(req: NextRequest) {
 
   try {
     await connectToDatabase();
+    await ensureDefaultSpecies();
+
     const user = await User.findById(auth.userId).lean();
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
 
     const ownedBirds: string[] = user.ownedBirds || ['pigeon'];
     const activeBirdId = user.activeBird || 'pigeon';
 
-    const birds = AVIARY_SPECIES.map((spec) => {
-      const isOwned = ownedBirds.includes(spec.id);
-      const isCurrentCarrier = activeBirdId === spec.id;
+    // Fetch dynamic active species from MongoDB
+    const dbSpecies = await BirdSpecies.find({ isActive: true }).sort({ minLevel: 1, priceGold: 1 }).lean();
+
+    const birds = dbSpecies.map((spec: any) => {
+      const isOwned = ownedBirds.includes(spec.speciesId);
+      const isCurrentCarrier = activeBirdId === spec.speciesId;
 
       return {
-        ...spec,
+        id: spec.speciesId,
+        speciesId: spec.speciesId,
+        name: spec.name,
+        speedKmH: spec.speedKmH,
+        priceGold: spec.priceGold,
+        subtitle: spec.subtitle || '',
+        requirementText: spec.requirementText || '',
+        minLevel: spec.minLevel || 1,
+        avatarBase64: spec.avatarBase64 || '',
+        flyingBase64: spec.flyingBase64 || '',
+        sizeRank: spec.sizeRank || 1,
         isOwned,
         isCurrentCarrier,
         status: isCurrentCarrier ? 'Current carrier' : isOwned ? 'Owned' : 'Locked',
@@ -121,7 +166,7 @@ export async function GET(req: NextRequest) {
         gold: user.gold ?? 5,
         activeBird: activeBirdId,
         ownedCount: ownedBirds.length,
-        totalCount: AVIARY_SPECIES.length,
+        totalCount: birds.length,
         birds,
       },
       { status: 200, headers: CORS_HEADERS }
@@ -138,11 +183,30 @@ export async function POST(req: NextRequest) {
 
   try {
     await connectToDatabase();
+    await ensureDefaultSpecies();
+
     const user = await User.findById(auth.userId);
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
 
     const body = await req.json();
     const { action, birdId } = body;
+
+    // Helper to find species by ID in MongoDB or fallback
+    const findSpecies = async (id: string) => {
+      const dbSpec = await BirdSpecies.findOne({ speciesId: id, isActive: true }).lean();
+      if (dbSpec) return dbSpec;
+      const fallback = AVIARY_SPECIES.find((s) => s.id === id);
+      if (fallback) {
+        return {
+          speciesId: fallback.id,
+          name: fallback.name,
+          speedKmH: fallback.speedKmH,
+          priceGold: fallback.priceGold,
+          minLevel: fallback.minLevel,
+        };
+      }
+      return null;
+    };
 
     // 1. SELECT CURRENT CARRIER
     if (action === 'select') {
@@ -154,12 +218,11 @@ export async function POST(req: NextRequest) {
       user.activeBird = birdId;
       await user.save();
 
-      // Also update primary pigeon species and speed if exists
-      const targetSpec = AVIARY_SPECIES.find((s) => s.id === birdId);
+      const targetSpec = await findSpecies(birdId);
       if (targetSpec) {
         await Pigeon.findOneAndUpdate(
           { ownerId: user._id },
-          { species: targetSpec.id, speedKmH: targetSpec.speedKmH, name: targetSpec.name }
+          { species: targetSpec.speciesId, speedKmH: targetSpec.speedKmH, name: targetSpec.name }
         );
       }
 
@@ -168,7 +231,7 @@ export async function POST(req: NextRequest) {
 
     // 2. BUY BIRD WITH GOLD
     if (action === 'buy') {
-      const targetSpec = AVIARY_SPECIES.find((s) => s.id === birdId);
+      const targetSpec = await findSpecies(birdId);
       if (!targetSpec) {
         return NextResponse.json({ error: 'Unknown bird species' }, { status: 404, headers: CORS_HEADERS });
       }
@@ -191,7 +254,7 @@ export async function POST(req: NextRequest) {
       // Create or update bird in user's loft
       await Pigeon.findOneAndUpdate(
         { ownerId: user._id },
-        { species: targetSpec.id, speedKmH: targetSpec.speedKmH, name: targetSpec.name },
+        { species: targetSpec.speciesId, speedKmH: targetSpec.speedKmH, name: targetSpec.name },
         { upsert: true }
       );
 
