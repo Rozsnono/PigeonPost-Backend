@@ -71,6 +71,14 @@ export interface IUser extends Document {
     max: number;
     resetAt?: Date;
   };
+  dailyRewards?: {
+    lastDailyClaimAt?: Date;
+    dailyStreak: number;
+    lastGambleAt?: Date;
+    questsCompletedToday?: string[];
+  };
+  claimedMilestones?: string[];
+  totalKmExplored?: number;
 
   isDeleted: boolean;
   deletedAt?: Date;
@@ -162,6 +170,14 @@ const UserSchema: Schema = new Schema(
       max: { type: Number, default: 20 },
       resetAt: { type: Date, default: Date.now },
     },
+    dailyRewards: {
+      lastDailyClaimAt: { type: Date, default: null },
+      dailyStreak: { type: Number, default: 0 },
+      lastGambleAt: { type: Date, default: null },
+      questsCompletedToday: { type: [String], default: [] },
+    },
+    claimedMilestones: { type: [String], default: [] },
+    totalKmExplored: { type: Number, default: 0 },
 
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },

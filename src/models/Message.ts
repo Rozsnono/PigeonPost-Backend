@@ -38,6 +38,7 @@ export interface IMessage extends Document {
   returnedNotified?: boolean;
   isOpenSkies?: boolean;
   attachedStampId?: string;
+  deliveryGoldReward?: number;
 
   createdAt: Date;
   updatedAt: Date;
@@ -87,7 +88,8 @@ const MessageSchema: Schema = new Schema(
     heldByAction: { type: String, enum: ['none', 'fed_seeds', 'caged'], default: 'none' },
     heldUntil: { type: Date },
     isOpenSkies: { type: Boolean, default: false },
-    attachedStampId: { type: String, default: null }
+    attachedStampId: { type: String, default: null },
+    deliveryGoldReward: { type: Number, default: 0 }
   },
   {
     timestamps: true,

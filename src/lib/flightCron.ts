@@ -1,6 +1,7 @@
 import connectToDatabase from '@/lib/db';
 import Message from '@/models/Message';
 import Pigeon from '@/models/Pigeon';
+import User from '@/models/User';
 import { sendPushToUser } from '@/lib/push';
 import { createLog } from '@/lib/logger';
 
@@ -103,6 +104,13 @@ export async function checkFlightStatuses() {
         }
       }
 
+      // Credit delivery gold reward to sender
+      const goldReward = m.deliveryGoldReward || Math.max(5, Math.round(5 + (m.distanceKm || 1) / 15));
+      const senderUserId = (m.senderId as any)?._id || m.senderId;
+      if (senderUserId) {
+        await User.findByIdAndUpdate(senderUserId, { $inc: { gold: goldReward } });
+      }
+
       returnedCount++;
 
       if (m.senderId && typeof m.senderId === 'object' && (m.senderId as any).expoPushToken) {
@@ -115,8 +123,8 @@ export async function checkFlightStatuses() {
         await sendPushToUser(
           sender,
           '🕊️ A galambod hazaért!',
-          `${pigeonName} sikeresen visszatért a dúcba a kézbesítés után!`,
-          { type: 'pigeon_returned', messageId: m._id }
+          `${pigeonName} sikeresen visszatért a dúcba, és +${goldReward} aranyat hozott a kézbesítésért!`,
+          { type: 'pigeon_returned', messageId: m._id, goldEarned: goldReward }
         ).catch((err) => {
           console.warn('[checkFlightStatuses] Push to sender failed:', err);
         });

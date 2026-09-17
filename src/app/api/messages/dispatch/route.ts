@@ -146,6 +146,9 @@ export async function POST(req: NextRequest) {
     const dispatchedAt = new Date();
     const estimatedArrivalAt = new Date(dispatchedAt.getTime() + flightDurationMinutes * 60000);
 
+    // Calculate delivery fee / gold earned upon safe return
+    const deliveryGoldReward = Math.max(5, Math.round(5 + (distanceKm / 15) * (isFlock ? 1.5 : 1.0)));
+
     const message = await Message.create({
       senderId: auth.userId,
       recipientId,
@@ -163,6 +166,7 @@ export async function POST(req: NextRequest) {
       dispatchedAt,
       estimatedArrivalAt,
       senderLocalTime: dispatchedAt.toISOString(),
+      deliveryGoldReward,
       status: 'flying',
     });
 
