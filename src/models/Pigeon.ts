@@ -5,6 +5,7 @@ export interface IPigeon extends Document {
   name: string;
   identifier: string; // E.g., #1024
   level: number; // 1, 2, 3+ (affects color, speed, survival rate)
+  xp: number;
   species: string; // pigeon, starling, raven, barn_owl, golden_eagle, peregrine, falcon_express, phoenix_express, turtle_dove
   speedKmH: number; // 80, 92, 96, 102, 160, 170, 240, 300, 88
   journeysCount: number;
@@ -21,6 +22,7 @@ const PigeonSchema: Schema = new Schema(
     name: { type: String, required: true },
     identifier: { type: String, required: true },
     level: { type: Number, default: 1 },
+    xp: { type: Number, default: 0 },
     species: { type: String, default: 'pigeon' },
     speedKmH: { type: Number, default: 80 },
     journeysCount: { type: Number, default: 0 },

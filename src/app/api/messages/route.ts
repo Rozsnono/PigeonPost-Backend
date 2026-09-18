@@ -56,11 +56,50 @@ export async function GET(req: NextRequest) {
           Pigeon.findByIdAndUpdate(pid, { status: 'idle' }).exec();
         }
 
-        // Credit delivery gold reward to sender
+        // Credit delivery gold reward & XP to sender
         const goldReward = m.deliveryGoldReward || Math.max(5, Math.round(5 + (m.distanceKm || 1) / 15));
         const senderUserId = m.senderId?._id || m.senderId;
+        const userXpEarned = Math.max(15, Math.round(15 + (m.distanceKm || 1) * 0.4));
+        const pigeonXpEarned = Math.max(20, Math.round(20 + (m.distanceKm || 1) * 0.5));
+
         if (senderUserId) {
-          User.findByIdAndUpdate(senderUserId, { $inc: { gold: goldReward } }).exec();
+          User.findById(senderUserId).then(async (sUser) => {
+            if (sUser) {
+              sUser.gold = (sUser.gold ?? 0) + goldReward;
+              let uLvl = sUser.level || 1;
+              let uXp = (sUser.xp || 0) + userXpEarned;
+              while (uXp >= uLvl * 100) {
+                uXp -= uLvl * 100;
+                uLvl += 1;
+                sUser.gold += uLvl * 25;
+              }
+              sUser.level = uLvl;
+              sUser.xp = uXp;
+              await sUser.save();
+            }
+          }).catch(() => {});
+        }
+
+        const pids = m.pigeonIds && m.pigeonIds.length > 0
+          ? m.pigeonIds.map((p: any) => p._id || p)
+          : (m.pigeonId?._id || m.pigeonId ? [m.pigeonId?._id || m.pigeonId] : []);
+
+        for (const pid of pids) {
+          Pigeon.findById(pid).then(async (pig) => {
+            if (pig) {
+              pig.status = 'idle';
+              let pLvl = pig.level || 1;
+              let pXp = (pig.xp || 0) + pigeonXpEarned;
+              while (pXp >= pLvl * 100) {
+                pXp -= pLvl * 100;
+                pLvl += 1;
+                pig.speedKmH = (pig.speedKmH || 80) + 2;
+              }
+              pig.level = pLvl;
+              pig.xp = pXp;
+              await pig.save();
+            }
+          }).catch(() => {});
         }
 
         // Push notification to sender that their pigeon returned home!
@@ -71,8 +110,8 @@ export async function GET(req: NextRequest) {
           sendPushToUser(
             m.senderId,
             '🕊️ A galambod hazaért!',
-            `${pigeonName} sikeresen visszatért a dúcba, és +${goldReward} aranyat hozott a kézbesítésért!`,
-            { type: 'pigeon_returned', messageId: m._id, goldEarned: goldReward }
+            `${pigeonName} sikeresen visszatért a dúcba, és +${goldReward} aranyat és +${userXpEarned} XP-t hozott a kézbesítésért!`,
+            { type: 'pigeon_returned', messageId: m._id, goldEarned: goldReward, xpEarned: userXpEarned }
           ).catch(() => {});
         }
       }
@@ -127,7 +166,7 @@ export async function GET(req: NextRequest) {
             const pid = m.pigeonId?._id || m.pigeonId;
             Pigeon.findByIdAndUpdate(pid, { status: 'idle' }).exec();
           }
-        } else if (deliveredElapsedMs > 5 * 60 * 1000) {
+        } else if (deliveredElapsedMs > 30 * 1000) {
           const returnDurationMinutes = Math.max(1, Math.round((m.flightDurationMinutes || 10) / 2));
           m.returningStatus = 'returning';
           m.returnDispatchedAt = now;

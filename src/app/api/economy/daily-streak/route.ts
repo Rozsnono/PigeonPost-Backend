@@ -8,13 +8,13 @@ export async function OPTIONS() {
 }
 
 export const STREAK_REWARDS = [
-  { day: 1, gold: 25, seeds: 5, cages: 0, label: 'Kezdő postamester' },
-  { day: 2, gold: 40, seeds: 5, cages: 0, label: 'Szorgalmas dúc' },
-  { day: 3, gold: 75, seeds: 10, cages: 0, label: 'Megbízható futár' },
-  { day: 4, gold: 110, seeds: 10, cages: 0, label: 'Királyi útvonal' },
-  { day: 5, gold: 150, seeds: 15, cages: 0, label: 'Hűséges feladó' },
-  { day: 6, gold: 200, seeds: 20, cages: 0, label: 'Dúcmester elismerés' },
-  { day: 7, gold: 350, seeds: 30, cages: 1, label: '👑 Arany Dúcláda (Főjutalom!)' },
+  { day: 1, gold: 25, seeds: 5, cages: 0, xp: 30, label: 'Kezdő postamester' },
+  { day: 2, gold: 40, seeds: 5, cages: 0, xp: 45, label: 'Szorgalmas dúc' },
+  { day: 3, gold: 75, seeds: 10, cages: 0, xp: 65, label: 'Megbízható futár' },
+  { day: 4, gold: 110, seeds: 10, cages: 0, xp: 90, label: 'Királyi útvonal' },
+  { day: 5, gold: 150, seeds: 15, cages: 0, xp: 120, label: 'Hűséges feladó' },
+  { day: 6, gold: 200, seeds: 20, cages: 0, xp: 160, label: 'Dúcmester elismerés' },
+  { day: 7, gold: 350, seeds: 30, cages: 1, xp: 250, label: '👑 Arany Dúcláda (Főjutalom!)' },
 ];
 
 function isSameCalendarDay(d1: Date, d2: Date): boolean {
@@ -107,6 +107,20 @@ export async function POST(req: NextRequest) {
       user.inventory.cages = (user.inventory.cages ?? 0) + reward.cages;
     }
 
+    // Award streak XP
+    const xpEarned = reward.xp || 30;
+    let uLvl = user.level || 1;
+    let uXp = (user.xp || 0) + xpEarned;
+    let userLeveledUp = false;
+    while (uXp >= uLvl * 100) {
+      uXp -= uLvl * 100;
+      uLvl += 1;
+      user.gold += uLvl * 25;
+      userLeveledUp = true;
+    }
+    user.level = uLvl;
+    user.xp = uXp;
+
     if (!user.dailyRewards) {
       user.dailyRewards = {
         dailyStreak: 0,
@@ -123,6 +137,12 @@ export async function POST(req: NextRequest) {
         success: true,
         streakDay: currentStreak,
         reward,
+        goldEarned: reward.gold,
+        seedsEarned: reward.seeds,
+        xpEarned,
+        userLeveledUp,
+        newUserLevel: user.level,
+        newUserXp: user.xp,
         newGold: user.gold,
         newSeeds: user.inventory.seeds,
         newCages: user.inventory.cages,

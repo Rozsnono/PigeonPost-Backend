@@ -106,6 +106,20 @@ export async function POST(req: NextRequest) {
       user.inventory.seeds = (user.inventory.seeds ?? 0) + chosenPrize.amount;
     }
 
+    // Award gamble spin XP
+    const xpEarned = 25;
+    let uLvl = user.level || 1;
+    let uXp = (user.xp || 0) + xpEarned;
+    let userLeveledUp = false;
+    while (uXp >= uLvl * 100) {
+      uXp -= uLvl * 100;
+      uLvl += 1;
+      user.gold += uLvl * 25;
+      userLeveledUp = true;
+    }
+    user.level = uLvl;
+    user.xp = uXp;
+
     if (!user.dailyRewards) {
       user.dailyRewards = {
         dailyStreak: 0,
@@ -122,6 +136,11 @@ export async function POST(req: NextRequest) {
       {
         success: true,
         prize: chosenPrize,
+        reward: chosenPrize,
+        xpEarned,
+        userLeveledUp,
+        newUserLevel: user.level,
+        newUserXp: user.xp,
         newGold: user.gold,
         newSeeds: user.inventory?.seeds,
         nextGambleAt: nextGambleAt.toISOString(),

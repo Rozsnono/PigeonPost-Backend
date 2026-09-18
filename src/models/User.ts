@@ -29,6 +29,7 @@ export interface IUser extends Document {
   passwordHash: string;
   avatar: string;
   level: number;
+  xp: number;
   inventory: {
     seeds: number;
     cages: number;
@@ -93,6 +94,7 @@ const UserSchema: Schema = new Schema(
     passwordHash: { type: String, required: true },
     avatar: { type: String, default: 'feather' },
     level: { type: Number, default: 1 },
+    xp: { type: Number, default: 0 },
     inventory: {
       seeds: { type: Number, default: 10 },
       cages: { type: Number, default: 1 },

@@ -147,26 +147,51 @@ export async function POST(req: NextRequest) {
       todayStart.setHours(0, 0, 0, 0);
 
       let rewardGold = 35;
+      let rewardXp = 40;
       if (id === 'quest_send_letter') {
         const count = await Message.countDocuments({ senderId: auth.userId, createdAt: { $gte: todayStart } });
         if (count < 1) return NextResponse.json({ error: 'A feladat még nincs teljesítve!' }, { status: 400, headers: CORS_HEADERS });
         rewardGold = 35;
+        rewardXp = 40;
       } else if (id === 'quest_start_expedition') {
         const count = await Expedition.countDocuments({ userId: auth.userId, createdAt: { $gte: todayStart } });
         if (count < 1) return NextResponse.json({ error: 'A feladat még nincs teljesítve!' }, { status: 400, headers: CORS_HEADERS });
         rewardGold = 40;
+        rewardXp = 45;
       } else if (id === 'quest_distance') {
         const msgs = await Message.find({ senderId: auth.userId, createdAt: { $gte: todayStart } }).select('distanceKm').lean();
         const dist = Math.round(msgs.reduce((sum, m) => sum + (m.distanceKm || 0), 0));
         if (dist < 20) return NextResponse.json({ error: 'A feladat még nincs teljesítve!' }, { status: 400, headers: CORS_HEADERS });
         rewardGold = 50;
+        rewardXp = 60;
       }
 
       user.gold = (user.gold ?? 0) + rewardGold;
+      let uLvl = user.level || 1;
+      let uXp = (user.xp || 0) + rewardXp;
+      let userLeveledUp = false;
+      while (uXp >= uLvl * 100) {
+        uXp -= uLvl * 100;
+        uLvl += 1;
+        user.gold += uLvl * 25;
+        userLeveledUp = true;
+      }
+      user.level = uLvl;
+      user.xp = uXp;
       user.dailyRewards.questsCompletedToday.push(id);
       await user.save();
 
-      return NextResponse.json({ success: true, goldEarned: rewardGold, newGold: user.gold });
+      return NextResponse.json({
+        success: true,
+        goldEarned: rewardGold,
+        rewardGold,
+        xpEarned: rewardXp,
+        rewardXp,
+        userLeveledUp,
+        newUserLevel: user.level,
+        newUserXp: user.xp,
+        newGold: user.gold,
+      });
     }
 
     if (type === 'milestone') {
@@ -177,11 +202,35 @@ export async function POST(req: NextRequest) {
       const ms = MILESTONES.find((m) => m.id === id);
       if (!ms) return NextResponse.json({ error: 'Mérföldkő nem található!' }, { status: 404, headers: CORS_HEADERS });
 
-      user.gold = (user.gold ?? 0) + ms.rewardGold;
+      const rewardGold = ms.rewardGold;
+      const rewardXp = Math.round(ms.rewardGold * 1.5);
+
+      user.gold = (user.gold ?? 0) + rewardGold;
+      let uLvl = user.level || 1;
+      let uXp = (user.xp || 0) + rewardXp;
+      let userLeveledUp = false;
+      while (uXp >= uLvl * 100) {
+        uXp -= uLvl * 100;
+        uLvl += 1;
+        user.gold += uLvl * 25;
+        userLeveledUp = true;
+      }
+      user.level = uLvl;
+      user.xp = uXp;
       user.claimedMilestones.push(id);
       await user.save();
 
-      return NextResponse.json({ success: true, goldEarned: ms.rewardGold, newGold: user.gold });
+      return NextResponse.json({
+        success: true,
+        goldEarned: rewardGold,
+        rewardGold,
+        xpEarned: rewardXp,
+        rewardXp,
+        userLeveledUp,
+        newUserLevel: user.level,
+        newUserXp: user.xp,
+        newGold: user.gold,
+      });
     }
 
     return NextResponse.json({ error: 'Érvénytelen kérés!' }, { status: 400, headers: CORS_HEADERS });

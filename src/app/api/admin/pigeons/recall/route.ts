@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     // 1. Galamb állapotának és fáradtságának visszaállítása
     pigeon.status = 'idle';
     pigeon.fatigue = 0;
+    pigeon.cooldownUntil = null;
     await pigeon.save();
 
     // 2. Aktív repülő üzenetek lezárása / kézbesítése

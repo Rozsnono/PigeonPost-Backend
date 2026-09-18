@@ -140,6 +140,20 @@ export default function AdminDashboard() {
   });
   const [speciesSaving, setSpeciesSaving] = useState(false);
 
+  // Pigeon Edit Modal State
+  const [editingPigeon, setEditingPigeon] = useState<any | null>(null);
+  const [pigeonStatusFilter, setPigeonStatusFilter] = useState<'all' | 'flying' | 'idle' | 'resting' | 'dead'>('all');
+  const [pigeonForm, setPigeonForm] = useState({
+    name: '',
+    level: 1,
+    xp: 0,
+    speedKmH: 80,
+    fatigue: 0,
+    status: 'idle',
+    species: 'pigeon',
+  });
+  const [pigeonSaving, setPigeonSaving] = useState(false);
+
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
   const hdr = useCallback(() => ({ Authorization: `Bearer ${secret}` }), [secret]);
@@ -147,7 +161,7 @@ export default function AdminDashboard() {
 
   const fetchStats   = useCallback(async () => { try { const r = await fetch('/api/admin/stats',   { headers: hdr() }); if (r.ok) setStats(await r.json()); } catch {} }, [hdr]);
   const fetchUsers   = useCallback(async () => { try { const r = await fetch('/api/admin/users',   { headers: hdr() }); if (r.ok) setUsers(await r.json()); } catch {} }, [hdr]);
-  const fetchPigeons = useCallback(async () => { try { const r = await fetch('/api/admin/flights', { headers: hdr() }); if (r.ok) setPigeons(await r.json()); } catch {} }, [hdr]);
+  const fetchPigeons = useCallback(async () => { try { const r = await fetch('/api/admin/pigeons', { headers: hdr() }); if (r.ok) setPigeons(await r.json()); } catch {} }, [hdr]);
   const fetchSpecies = useCallback(async () => { try { const r = await fetch('/api/admin/species', { headers: hdr() }); if (r.ok) setSpeciesList(await r.json()); } catch {} }, [hdr]);
   const fetchMsgs    = useCallback(async () => { try { const r = await fetch('/api/admin/messages',{ headers: hdr() }); if (r.ok) setMsgs(await r.json()); } catch {} }, [hdr]);
 
@@ -161,7 +175,10 @@ export default function AdminDashboard() {
     if (!authed) return;
     if (tab === 'overview' || tab === 'activity') fetchStats();
     if (tab === 'users') fetchUsers();
-    if (tab === 'pigeons') fetchPigeons();
+    if (tab === 'pigeons') {
+      fetchPigeons();
+      fetchSpecies();
+    }
     if (tab === 'species') fetchSpecies();
     if (tab === 'messages') fetchMsgs();
   }, [tab, authed]);
@@ -170,7 +187,10 @@ export default function AdminDashboard() {
     setSpinning(true);
     if (tab === 'overview' || tab === 'activity') await fetchStats();
     if (tab === 'users') await fetchUsers();
-    if (tab === 'pigeons') await fetchPigeons();
+    if (tab === 'pigeons') {
+      await fetchPigeons();
+      await fetchSpecies();
+    }
     if (tab === 'species') await fetchSpecies();
     if (tab === 'messages') await fetchMsgs();
     setTimeout(() => setSpinning(false), 500);
@@ -331,6 +351,61 @@ export default function AdminDashboard() {
     if (r.ok) { toast$(`✓ ${d.message || name + ' hazatért!'}`); fetchPigeons(); fetchStats(); } else toast$(`✗ ${d.error || 'Sikertelen'}`);
   };
 
+  const openEditPigeon = (p: any) => {
+    setEditingPigeon(p);
+    setPigeonForm({
+      name: p.name || '',
+      level: p.level || 1,
+      xp: p.xp || 0,
+      speedKmH: p.speedKmH || 80,
+      fatigue: p.fatigue || 0,
+      status: p.status || 'idle',
+      species: p.species || 'pigeon',
+    });
+  };
+
+  const savePigeon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPigeon) return;
+    setPigeonSaving(true);
+    try {
+      const r = await fetch('/api/admin/pigeons', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...hdr() },
+        body: JSON.stringify({
+          pigeonId: editingPigeon._id,
+          ...pigeonForm,
+        }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        toast$(`✓ ${d.message || 'Galamb adatai sikeresen elmentve!'}`);
+        setEditingPigeon(null);
+        fetchPigeons();
+        fetchStats();
+      } else {
+        toast$(`✗ ${d.error || 'Sikertelen mentés'}`);
+      }
+    } catch (err: any) {
+      toast$(`✗ Hiba: ${err.message}`);
+    } finally {
+      setPigeonSaving(false);
+    }
+  };
+
+  const deletePigeon = async (pid: string, name: string) => {
+    if (!confirm(`Biztosan véglegesen törölni szeretnéd „${name}" galambot?`)) return;
+    const r = await fetch(`/api/admin/pigeons?id=${pid}`, { method: 'DELETE', headers: hdr() });
+    const d = await r.json();
+    if (r.ok) {
+      toast$(`✓ ${d.message || name + ' törölve'}`);
+      fetchPigeons();
+      fetchStats();
+    } else {
+      toast$(`✗ ${d.error || 'Sikertelen törlés'}`);
+    }
+  };
+
   const deliverMsg = async (mid: string) => {
     if (!confirm('Azonnal kézbesíted ezt a levelet?')) return;
     const r = await fetch('/api/admin/messages/deliver', { method: 'POST', headers: { 'Content-Type': 'application/json', ...hdr() }, body: JSON.stringify({ messageId: mid }) });
@@ -353,10 +428,24 @@ export default function AdminDashboard() {
   }, [users, search, sortBy, sortDir]);
 
   const filteredPigeons = useMemo(() => {
-    if (!search) return pigeons;
+    let list = pigeons;
+    if (pigeonStatusFilter !== 'all') {
+      if (pigeonStatusFilter === 'flying') {
+        list = list.filter(p => p.status === 'flying' || p.status === 'returning');
+      } else {
+        list = list.filter(p => p.status === pigeonStatusFilter);
+      }
+    }
+    if (!search) return list;
     const q = search.toLowerCase();
-    return pigeons.filter(p => p.name?.toLowerCase().includes(q) || p.ownerId?.username?.toLowerCase().includes(q));
-  }, [pigeons, search]);
+    return list.filter(p =>
+      p.name?.toLowerCase().includes(q) ||
+      p.identifier?.toLowerCase().includes(q) ||
+      p.species?.toLowerCase().includes(q) ||
+      p.ownerId?.username?.toLowerCase().includes(q) ||
+      p.ownerId?.email?.toLowerCase().includes(q)
+    );
+  }, [pigeons, search, pigeonStatusFilter]);
 
   const filteredSpecies = useMemo(() => {
     if (!search) return speciesList;
@@ -621,41 +710,130 @@ export default function AdminDashboard() {
           {/* ══ PIGEONS ════════════════════════════════════════════════════ */}
           {tab === 'pigeons' && (<>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 18 }}>
-              <StatCard title="Összes galamb" value={pigeons.length} Icon={I.Pigeon} color={C.purple} />
-              <StatCard title="Repülés alatt" value={pigeons.filter(p => p.status === 'flying').length} Icon={I.Flight} color={C.blue} />
-              <StatCard title="Pihenő" value={pigeons.filter(p => p.status === 'idle').length} Icon={I.Home} color={C.green} />
+              <StatCard title="Összes madár" value={pigeons.length} Icon={I.Pigeon} color={C.purple} />
+              <StatCard title="Repülés / Visszatérés" value={pigeons.filter(p => p.status === 'flying' || p.status === 'returning').length} Icon={I.Flight} color={C.blue} />
+              <StatCard title="Pihenő dúcban" value={pigeons.filter(p => p.status === 'idle').length} Icon={I.Home} color={C.green} />
               <StatCard title="Elhullott" value={pigeons.filter(p => p.status === 'dead').length} Icon={I.Skull} color={C.red} />
             </div>
+
             <div style={{ background: 'rgba(15,21,36,0.8)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden' }}>
-              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8' }}>🕊️ Galambok ({filteredPigeons.length})</span>
+              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8' }}>🕊️ Postamadarak ({filteredPigeons.length} / {pigeons.length})</span>
+                </div>
+                {/* Status Filter Chips */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+                  {[
+                    { id: 'all', label: 'Mind' },
+                    { id: 'flying', label: '✈️ Repül / Visszatér' },
+                    { id: 'idle', label: '🏠 Dúcban' },
+                    { id: 'resting', label: '⚡ Regenerál' },
+                    { id: 'dead', label: '💀 Elhullott' },
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => setPigeonStatusFilter(f.id as any)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 7,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        background: pigeonStatusFilter === f.id ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.04)',
+                        color: pigeonStatusFilter === f.id ? '#818cf8' : '#94a3b8',
+                        border: `1px solid ${pigeonStatusFilter === f.id ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' as const, fontSize: 13 }}>
-                  <thead><tr>{['Galamb','Azonosító','Tulajdonos','Állapot','Fáradtság','Faj','Frissítve','Művelet'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                  <thead>
+                    <tr>
+                      {['Madár & Szint', 'Azonosító', 'Tulajdonos', 'Állapot', 'Fáradtság', 'Sebesség', 'Faj', 'Műveletek'].map(h => <th key={h} style={th}>{h}</th>)}
+                    </tr>
+                  </thead>
                   <tbody>
-                    {filteredPigeons.map((p: any) => (
-                      <tr key={p._id}>
-                        <td style={td}><div style={{ fontWeight: 700, color: '#e2e8f0' }}>{p.name}</div>{p.level && <span style={{ fontSize: 10, color: '#64748b' }}>Szint: {p.level}</span>}</td>
-                        <td style={{ ...td, fontFamily: 'monospace', fontSize: 11, color: '#475569' }}>{p.identifier ?? '—'}</td>
-                        <td style={td}>
-                          {p.ownerId ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <Avatar name={p.ownerId.username ?? '?'} />
-                              <span style={{ fontSize: 12, color: '#94a3b8' }}>{p.ownerId.username}</span>
+                    {filteredPigeons.map((p: any) => {
+                      const canRecall = p.status === 'flying' || p.status === 'returning' || (p.fatigue && p.fatigue > 0);
+                      return (
+                        <tr key={p._id}>
+                          <td style={td}>
+                            <div>
+                              <div style={{ fontWeight: 700, color: '#e2e8f0' }}>{p.name}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                                <span style={{ fontSize: 10, background: 'rgba(245,158,11,0.15)', color: '#fbbf24', padding: '1px 5px', borderRadius: 4, fontWeight: 700, border: '1px solid rgba(245,158,11,0.3)' }}>
+                                  ⭐ {p.level || 1}. Szint
+                                </span>
+                                <span style={{ fontSize: 10, color: '#94a3b8' }}>
+                                  {p.xp || 0} XP
+                                </span>
+                              </div>
                             </div>
-                          ) : <span style={{ color: '#374151' }}>—</span>}
-                        </td>
-                        <td style={td}><StatusBadge status={p.status} /></td>
-                        <td style={{ ...td, minWidth: 130 }}><ProgressBar value={p.fatigue ?? 0} color={p.fatigue > 70 ? C.red : p.fatigue > 40 ? C.yellow : C.green} /></td>
-                        <td style={{ ...td, fontSize: 11, color: '#64748b' }}>{p.species ?? 'pigeon'}</td>
-                        <td style={{ ...td, fontSize: 11, fontFamily: 'monospace', color: '#475569' }}>{p.updatedAt ? new Date(p.updatedAt).toLocaleString('hu-HU') : '—'}</td>
-                        <td style={td}>
-                          {p.status === 'flying' ? <button style={btn('primary')} onClick={() => recallPigeon(p._id, p.name)}><I.Home />Hazahív</button> : <span style={{ color: '#374151', fontSize: 12 }}>—</span>}
+                          </td>
+                          <td style={{ ...td, fontFamily: 'monospace', fontSize: 11, color: '#94a3b8' }}>{p.identifier ?? '—'}</td>
+                          <td style={td}>
+                            {p.ownerId ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Avatar name={p.ownerId.username ?? '?'} />
+                                <div>
+                                  <div style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1' }}>{p.ownerId.username}</div>
+                                  <div style={{ fontSize: 10, color: '#64748b' }}>{p.ownerId.email}</div>
+                                </div>
+                              </div>
+                            ) : <span style={{ color: '#64748b' }}>Rendszer / Nincs</span>}
+                          </td>
+                          <td style={td}><StatusBadge status={p.status} /></td>
+                          <td style={{ ...td, minWidth: 120 }}>
+                            <ProgressBar value={p.fatigue ?? 0} color={p.fatigue > 70 ? C.red : p.fatigue > 40 ? C.yellow : C.green} />
+                          </td>
+                          <td style={{ ...td, fontSize: 12, fontWeight: 600, color: '#e2e8f0' }}>
+                            ⚡ {p.speedKmH || 80} km/h
+                          </td>
+                          <td style={{ ...td, fontSize: 11, color: '#94a3b8' }}>
+                            {p.species ?? 'pigeon'}
+                          </td>
+                          <td style={td}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+                              {canRecall && (
+                                <button
+                                  style={{ ...btn('primary'), padding: '4px 9px', fontSize: 11 }}
+                                  onClick={() => recallPigeon(p._id, p.name)}
+                                  title="Azonnali hazahívás a dúcba és kipihentetés"
+                                >
+                                  <I.Home /> Hazahív
+                                </button>
+                              )}
+                              <button
+                                style={{ ...btn('ghost'), padding: '4px 9px', fontSize: 11 }}
+                                onClick={() => openEditPigeon(p)}
+                                title="Galamb adatainak szerkesztése"
+                              >
+                                <I.Edit /> Szerkeszt
+                              </button>
+                              <button
+                                style={{ ...btn('danger'), padding: '4px 8px', fontSize: 11 }}
+                                onClick={() => deletePigeon(p._id, p.name)}
+                                title="Galamb végleges törlése"
+                              >
+                                <I.Trash />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredPigeons.length === 0 && (
+                      <tr>
+                        <td colSpan={8} style={{ ...td, textAlign: 'center', color: '#64748b', padding: '36px 16px' }}>
+                          {search ? `Nincs találat: "${search}"` : 'Nincsenek madarak'}
                         </td>
                       </tr>
-                    ))}
-                    {filteredPigeons.length === 0 && <tr><td colSpan={8} style={{ ...td, textAlign: 'center', color: '#374151', padding: '36px 16px' }}>{search ? `Nincs találat: "${search}"` : 'Nincs galamb'}</td></tr>}
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1060,6 +1238,225 @@ export default function AdminDashboard() {
                     {speciesSaving ? 'Mentés...' : 'Fajta mentése'}
                   </button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ══ PIGEON EDIT MODAL ══════════════════════════════════════════ */}
+      {editingPigeon && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)',
+          backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 9999, padding: 20,
+        }}>
+          <div style={{
+            background: '#0e1322', border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '90vh',
+            overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.85)',
+          }}>
+            <div style={{
+              padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>
+                  🕊️ Madár adatainak szerkesztése
+                </h3>
+                <span style={{ fontSize: 11, color: '#64748b' }}>
+                  {editingPigeon.identifier} · Tulajdonos: {editingPigeon.ownerId?.username || '—'} ({editingPigeon.ownerId?.email || '—'})
+                </span>
+              </div>
+              <button
+                onClick={() => setEditingPigeon(null)}
+                style={{ background: 'transparent', border: 'none', color: '#64748b', fontSize: 20, cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={savePigeon} style={{ padding: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Madár Neve
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={pigeonForm.name}
+                    onChange={e => setPigeonForm(prev => ({ ...prev, name: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Szint (Level)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={pigeonForm.level}
+                    onChange={e => setPigeonForm(prev => ({ ...prev, level: +e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Tapasztalat (XP)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={pigeonForm.xp}
+                    onChange={e => setPigeonForm(prev => ({ ...prev, xp: +e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Sebesség (km/h)
+                  </label>
+                  <input
+                    type="number"
+                    min={10}
+                    value={pigeonForm.speedKmH}
+                    onChange={e => setPigeonForm(prev => ({ ...prev, speedKmH: +e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Fáradtság (%: 0=kipihent)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={pigeonForm.fatigue}
+                    onChange={e => setPigeonForm(prev => ({ ...prev, fatigue: +e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Állapot (Status)
+                  </label>
+                  <select
+                    value={pigeonForm.status}
+                    onChange={e => setPigeonForm(prev => ({ ...prev, status: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: '#161d30',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  >
+                    <option value="idle">🏠 Pihen a dúcban (idle)</option>
+                    <option value="flying">✈️ Repül levéllel (flying)</option>
+                    <option value="returning">↩️ Hazafelé siet (returning)</option>
+                    <option value="resting">⚡ Regenerálódik (resting)</option>
+                    <option value="dead">💀 Elhullott (dead)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Fajta (Species)
+                  </label>
+                  <select
+                    value={pigeonForm.species}
+                    onChange={e => setPigeonForm(prev => ({ ...prev, species: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: '#161d30',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  >
+                    {speciesList && speciesList.length > 0 ? (
+                      speciesList.map((s: any) => (
+                        <option key={s.speciesId} value={s.speciesId}>
+                          {s.name} ({s.speciesId})
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="pigeon">Városi Postagalamb (pigeon)</option>
+                        <option value="starling">Seregély (starling)</option>
+                        <option value="raven">Holló (raven)</option>
+                        <option value="barn_owl">Gyöngybagoly (barn_owl)</option>
+                        <option value="golden_eagle">Szirti Sas (golden_eagle)</option>
+                        <option value="peregrine">Vándorsólyom (peregrine)</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {/* Quick Action in Modal */}
+              <div style={{
+                marginTop: 16, padding: '12px', background: 'rgba(255,255,255,0.03)',
+                borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                  Gyorsművelet:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    recallPigeon(editingPigeon._id, editingPigeon.name);
+                    setEditingPigeon(null);
+                  }}
+                  style={{ ...btn('primary'), fontSize: 11, padding: '5px 10px' }}
+                >
+                  <I.Home /> Azonnali Hazahívás & Kipihentetés
+                </button>
+              </div>
+
+              <div style={{
+                marginTop: 20, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)',
+                display: 'flex', justifyContent: 'flex-end', gap: 10,
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingPigeon(null)}
+                  style={{ ...btn('ghost'), padding: '8px 14px' }}
+                >
+                  Mégse
+                </button>
+                <button
+                  type="submit"
+                  disabled={pigeonSaving}
+                  style={{ ...btn('success'), padding: '8px 18px', fontWeight: 700 }}
+                >
+                  {pigeonSaving ? 'Mentés...' : '✓ Módosítások Mentése'}
+                </button>
               </div>
             </form>
           </div>

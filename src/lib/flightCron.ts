@@ -80,8 +80,8 @@ export async function checkFlightStatuses() {
       }
     }
 
-    // Auto-dispatch returning flight for pigeons delivered > 5 mins ago with returningStatus === 'idle'
-    const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000);
+    // Auto-dispatch returning flight for pigeons delivered > 30s ago with returningStatus === 'idle'
+    const thirtySecAgo = new Date(now.getTime() - 30 * 1000);
     const twoHoursAgo = new Date(now.getTime() - 2 * 3600 * 1000);
 
     await Message.updateMany(
@@ -96,7 +96,7 @@ export async function checkFlightStatuses() {
     const pendingReturnMessages = await Message.find({
       status: 'delivered',
       returningStatus: 'idle',
-      estimatedArrivalAt: { $lte: fiveMinAgo, $gt: twoHoursAgo },
+      estimatedArrivalAt: { $lte: thirtySecAgo, $gt: twoHoursAgo },
     }).lean();
 
     for (const m of pendingReturnMessages) {
@@ -132,20 +132,48 @@ export async function checkFlightStatuses() {
         returnedNotified: true,
       });
 
-      if (m.pigeonIds && m.pigeonIds.length > 0) {
-        await Pigeon.updateMany({ _id: { $in: m.pigeonIds } }, { status: 'idle' });
-      } else {
-        const pid = (m.pigeonId as any)?._id || m.pigeonId;
-        if (pid) {
-          await Pigeon.findByIdAndUpdate(pid, { status: 'idle' });
+      const userXpEarned = Math.max(15, Math.round(15 + (m.distanceKm || 1) * 0.4));
+      const pigeonXpEarned = Math.max(20, Math.round(20 + (m.distanceKm || 1) * 0.5));
+
+      const pids = m.pigeonIds && m.pigeonIds.length > 0
+        ? m.pigeonIds.map((p: any) => p._id || p)
+        : [(m.pigeonId as any)?._id || m.pigeonId].filter(Boolean);
+
+      for (const pid of pids) {
+        const pig = await Pigeon.findById(pid);
+        if (pig) {
+          pig.status = 'idle';
+          let pLvl = pig.level || 1;
+          let pXp = (pig.xp || 0) + pigeonXpEarned;
+          while (pXp >= pLvl * 100) {
+            pXp -= pLvl * 100;
+            pLvl += 1;
+            pig.speedKmH = (pig.speedKmH || 80) + 2;
+          }
+          pig.level = pLvl;
+          pig.xp = pXp;
+          await pig.save();
         }
       }
 
-      // Credit delivery gold reward to sender
+      // Credit delivery gold reward & XP to sender
       const goldReward = m.deliveryGoldReward || Math.max(5, Math.round(5 + (m.distanceKm || 1) / 15));
       const senderUserId = (m.senderId as any)?._id || m.senderId;
       if (senderUserId) {
-        await User.findByIdAndUpdate(senderUserId, { $inc: { gold: goldReward } });
+        const sUser = await User.findById(senderUserId);
+        if (sUser) {
+          sUser.gold = (sUser.gold ?? 0) + goldReward;
+          let uLvl = sUser.level || 1;
+          let uXp = (sUser.xp || 0) + userXpEarned;
+          while (uXp >= uLvl * 100) {
+            uXp -= uLvl * 100;
+            uLvl += 1;
+            sUser.gold += uLvl * 25;
+          }
+          sUser.level = uLvl;
+          sUser.xp = uXp;
+          await sUser.save();
+        }
       }
 
       returnedCount++;
@@ -154,14 +182,14 @@ export async function checkFlightStatuses() {
         const sender = m.senderId as any;
         const pigeon = m.pigeonId as any;
         const pigeonName = m.isFlock 
-          ? `A(z) ${m.flockSize || 1} tagú madárrajod`
+          ? `A(z) ${m.flockSize || 1} tagú madárrajod` 
           : (pigeon?.name || 'Postagalambod');
 
         await sendPushToUser(
           sender,
           '🕊️ A galambod hazaért!',
-          `${pigeonName} sikeresen visszatért a dúcba, és +${goldReward} aranyat hozott a kézbesítésért!`,
-          { type: 'pigeon_returned', messageId: m._id, goldEarned: goldReward }
+          `${pigeonName} sikeresen visszatért a dúcba, és +${goldReward} aranyat és +${userXpEarned} XP-t hozott a kézbesítésért!`,
+          { type: 'pigeon_returned', messageId: m._id, goldEarned: goldReward, xpEarned: userXpEarned }
         ).catch((err) => {
           console.warn('[checkFlightStatuses] Push to sender failed:', err);
         });
