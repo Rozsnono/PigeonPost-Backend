@@ -27,7 +27,7 @@ const I = {
   Upload: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
 };
 
-type Tab = 'overview' | 'users' | 'pigeons' | 'species' | 'messages' | 'activity';
+type Tab = 'overview' | 'users' | 'pigeons' | 'species' | 'wheel' | 'messages' | 'activity';
 
 const C = {
   purple: '#818cf8', blue: '#60a5fa', green: '#34d399', red: '#f87171', yellow: '#fbbf24', amber: '#fbbf24'
@@ -154,6 +154,23 @@ export default function AdminDashboard() {
   });
   const [pigeonSaving, setPigeonSaving] = useState(false);
 
+  // Wheel State
+  const [wheelSlots, setWheelSlots] = useState<any[]>([]);
+  const [wheelTotalWeight, setWheelTotalWeight] = useState(0);
+  const [wheelModal, setWheelModal] = useState<'add' | 'edit' | null>(null);
+  const [editingWheelSlot, setEditingWheelSlot] = useState<any | null>(null);
+  const [wheelForm, setWheelForm] = useState({
+    slotId: '',
+    label: '',
+    type: 'gold',
+    amount: 50,
+    weight: 10,
+    color: '#f59e0b',
+    rarity: 'common',
+    isActive: true,
+  });
+  const [wheelSaving, setWheelSaving] = useState(false);
+
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
   const hdr = useCallback(() => ({ Authorization: `Bearer ${secret}` }), [secret]);
@@ -163,6 +180,16 @@ export default function AdminDashboard() {
   const fetchUsers   = useCallback(async () => { try { const r = await fetch('/api/admin/users',   { headers: hdr() }); if (r.ok) setUsers(await r.json()); } catch {} }, [hdr]);
   const fetchPigeons = useCallback(async () => { try { const r = await fetch('/api/admin/pigeons', { headers: hdr() }); if (r.ok) setPigeons(await r.json()); } catch {} }, [hdr]);
   const fetchSpecies = useCallback(async () => { try { const r = await fetch('/api/admin/species', { headers: hdr() }); if (r.ok) setSpeciesList(await r.json()); } catch {} }, [hdr]);
+  const fetchWheel   = useCallback(async () => {
+    try {
+      const r = await fetch('/api/admin/wheel', { headers: hdr() });
+      if (r.ok) {
+        const d = await r.json();
+        setWheelSlots(d.slots || []);
+        setWheelTotalWeight(d.totalWeight || 0);
+      }
+    } catch {}
+  }, [hdr]);
   const fetchMsgs    = useCallback(async () => { try { const r = await fetch('/api/admin/messages',{ headers: hdr() }); if (r.ok) setMsgs(await r.json()); } catch {} }, [hdr]);
 
   const login = async (e: React.FormEvent) => {
@@ -180,6 +207,7 @@ export default function AdminDashboard() {
       fetchSpecies();
     }
     if (tab === 'species') fetchSpecies();
+    if (tab === 'wheel') fetchWheel();
     if (tab === 'messages') fetchMsgs();
   }, [tab, authed]);
 
@@ -192,6 +220,7 @@ export default function AdminDashboard() {
       await fetchSpecies();
     }
     if (tab === 'species') await fetchSpecies();
+    if (tab === 'wheel') await fetchWheel();
     if (tab === 'messages') await fetchMsgs();
     setTimeout(() => setSpinning(false), 500);
   };
@@ -321,6 +350,86 @@ export default function AdminDashboard() {
       fetchSpecies();
     } else {
       toast$(`✗ ${d.error || 'Törlés sikertelen'}`);
+    }
+  };
+
+  const openAddWheelSlot = () => {
+    setEditingWheelSlot(null);
+    setWheelForm({
+      slotId: `slot_${Date.now()}`,
+      label: '',
+      type: 'gold',
+      amount: 50,
+      weight: 10,
+      color: '#f59e0b',
+      rarity: 'common',
+      isActive: true,
+    });
+    setWheelModal('add');
+  };
+
+  const openEditWheelSlot = (slot: any) => {
+    setEditingWheelSlot(slot);
+    setWheelForm({
+      slotId: slot.slotId || '',
+      label: slot.label || '',
+      type: slot.type || 'gold',
+      amount: slot.amount ?? 50,
+      weight: slot.weight ?? 10,
+      color: slot.color || '#f59e0b',
+      rarity: slot.rarity || 'common',
+      isActive: slot.isActive !== false,
+    });
+    setWheelModal('edit');
+  };
+
+  const saveWheelSlot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWheelSaving(true);
+    try {
+      const payload: any = { ...wheelForm };
+      if (editingWheelSlot?._id) payload._id = editingWheelSlot._id;
+      const r = await fetch('/api/admin/wheel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...hdr() },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        toast$(`✓ ${d.message || 'Szerencsekerék szelet mentve!'}`);
+        setWheelModal(null);
+        fetchWheel();
+      } else {
+        toast$(`✗ ${d.error || 'Sikertelen mentés'}`);
+      }
+    } catch (err: any) {
+      toast$(`✗ Hiba: ${err.message}`);
+    } finally {
+      setWheelSaving(false);
+    }
+  };
+
+  const deleteWheelSlot = async (id: string, label: string) => {
+    if (!confirm(`Biztosan törölni szeretnéd a(z) „${label}" nyereményt a szerencsekerékről?`)) return;
+    const r = await fetch(`/api/admin/wheel?id=${id}`, { method: 'DELETE', headers: hdr() });
+    const d = await r.json();
+    if (r.ok) {
+      toast$(`✓ ${label} törölve`);
+      fetchWheel();
+    } else {
+      toast$(`✗ ${d.error || 'Sikertelen törlés'}`);
+    }
+  };
+
+  const resetWheelDefaults = async () => {
+    if (!confirm('Biztosan visszaállítod a szerencsekereket az alapértelmezett nyereményekre és esélyekre?')) return;
+    const r = await fetch('/api/admin/wheel', { method: 'PUT', headers: hdr() });
+    const d = await r.json();
+    if (r.ok) {
+      toast$(`✓ ${d.message || 'Alapértelmezett szerencsekerék visszaállítva!'}`);
+      fetchWheel();
+    } else {
+      toast$(`✗ ${d.error || 'Sikertelen visszaállítás'}`);
     }
   };
 
@@ -458,12 +567,13 @@ export default function AdminDashboard() {
   const toggleRow = (id: string) => { const n = new Set(selected); n.has(id) ? n.delete(id) : n.add(id); setSelected(n); };
 
   const navItems: { id: Tab; label: string; Icon: () => React.ReactNode; badge?: number }[] = [
-    { id: 'overview',  label: 'Áttekintés',   Icon: I.Chart,    badge: undefined },
-    { id: 'users',     label: 'Felhasználók', Icon: I.Users,    badge: stats?.stats?.activeUsers },
-    { id: 'pigeons',   label: 'Galambok',     Icon: I.Pigeon,   badge: stats?.stats?.flyingPigeons },
-    { id: 'species',   label: 'Madárfajták',  Icon: I.Feather,  badge: speciesList.length },
-    { id: 'messages',  label: 'Üzenetek',     Icon: I.Mail,     badge: msgs?.stats?.flyingMessages },
-    { id: 'activity',  label: 'Aktivitás',    Icon: I.Activity, badge: undefined },
+    { id: 'overview',  label: 'Áttekintés',     Icon: I.Chart,    badge: undefined },
+    { id: 'users',     label: 'Felhasználók',   Icon: I.Users,    badge: stats?.stats?.activeUsers },
+    { id: 'pigeons',   label: 'Galambok',       Icon: I.Pigeon,   badge: stats?.stats?.flyingPigeons },
+    { id: 'species',   label: 'Madárfajták',    Icon: I.Feather,  badge: speciesList.length },
+    { id: 'wheel',     label: 'Szerencsekerék', Icon: I.Zap,      badge: wheelSlots.length },
+    { id: 'messages',  label: 'Üzenetek',       Icon: I.Mail,     badge: msgs?.stats?.flyingMessages },
+    { id: 'activity',  label: 'Aktivitás',      Icon: I.Activity, badge: undefined },
   ];
 
   // ── LOGIN ────────────────────────────────────────────────────────────────────
@@ -541,7 +651,7 @@ export default function AdminDashboard() {
         <header style={{ height: 58, background: 'rgba(11,15,26,0.85)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 22px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', margin: 0 }}>{navItems.find(n => n.id === tab)?.label}</h2>
-            {(tab === 'users' || tab === 'pigeons' || tab === 'species') && (
+            {(tab === 'users' || tab === 'pigeons' || tab === 'species' || tab === 'wheel') && (
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#475569', pointerEvents: 'none' }}><I.Search /></div>
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Keresés..."
@@ -552,6 +662,16 @@ export default function AdminDashboard() {
               <button onClick={openAddSpecies} style={{ ...btn('primary'), padding: '7px 14px', fontSize: 13, fontWeight: 700, marginLeft: 4 }}>
                 <I.Plus />Új madárfajta
               </button>
+            )}
+            {tab === 'wheel' && (
+              <div style={{ display: 'flex', gap: 8, marginLeft: 4 }}>
+                <button onClick={openAddWheelSlot} style={{ ...btn('primary'), padding: '7px 14px', fontSize: 13, fontWeight: 700 }}>
+                  <I.Plus />Új nyeremény
+                </button>
+                <button onClick={resetWheelDefaults} style={{ ...btn('ghost'), padding: '7px 12px', fontSize: 12 }}>
+                  <I.Refresh />Alapértelmezett
+                </button>
+              </div>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -948,6 +1068,164 @@ export default function AdminDashboard() {
                       <tr>
                         <td colSpan={9} style={{ ...td, textAlign: 'center', color: '#374151', padding: '36px 16px' }}>
                           {search ? `Nincs találat: "${search}"` : 'Nincs madárfajta feltöltve'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>)}
+
+          {/* ══ LUCKY WHEEL (SZERENCSEKERÉK) ═══════════════════════════ */}
+          {tab === 'wheel' && (<>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 18 }}>
+              <StatCard
+                title="Aktív nyeremények"
+                value={wheelSlots.filter(s => s.isActive !== false).length}
+                Icon={I.Zap}
+                color={C.purple}
+                sub={`${wheelSlots.length} szelet összesen`}
+              />
+              <StatCard
+                title="Összes esélysúly"
+                value={wheelTotalWeight}
+                Icon={I.Chart}
+                color={C.blue}
+                sub="100% eloszlás alapján"
+              />
+              <StatCard
+                title="Max arany fődíj"
+                value={Math.max(...wheelSlots.filter(s => s.type === 'gold').map(s => s.amount), 0).toLocaleString() + ' 🪙'}
+                Icon={I.Gold}
+                color={C.yellow}
+                sub="Királyi kincs"
+              />
+              <StatCard
+                title="Különleges tételek"
+                value={wheelSlots.filter(s => ['epic', 'legendary', 'mythic'].includes(s.rarity)).length}
+                Icon={I.Gift}
+                color={C.green}
+                sub="Epic / Legendás / Mythic"
+              />
+            </div>
+
+            <div style={{ background: 'rgba(15,21,36,0.8)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden' }}>
+              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8' }}>
+                  🎡 Napi Pörgetőskerék Szeletei & Esélyei ({wheelSlots.length})
+                </span>
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  A játékosok az appban ezt a kereket látják forogni és lelassulni
+                </span>
+              </div>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' as const, fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      {['Szelet & Szín', 'Típus', 'Jutalom Mennyiség', 'Ritkaság', 'Esélysúly', 'Nyerési Esély %', 'Állapot', 'Műveletek'].map(h => <th key={h} style={th}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {wheelSlots.map((slot: any) => {
+                      const typeLabel = slot.type === 'gold' ? 'Arany' : slot.type === 'seeds' ? 'Madármag' : slot.type === 'cages' ? 'Kalitka' : 'Dúcmester XP';
+                      const typeIcon = slot.type === 'gold' ? '🪙' : slot.type === 'seeds' ? '🌾' : slot.type === 'cages' ? '🎁' : '⭐';
+                      const rarityColor = ({
+                        common: '#94a3b8',
+                        uncommon: '#10b981',
+                        rare: '#38bdf8',
+                        epic: '#a855f7',
+                        legendary: '#f59e0b',
+                        mythic: '#fbbf24',
+                      } as any)[slot.rarity] || '#94a3b8';
+
+                      return (
+                        <tr key={slot._id || slot.slotId}>
+                          <td style={td}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{
+                                width: 20, height: 20, borderRadius: 6,
+                                background: slot.color || '#f59e0b',
+                                border: '1.5px solid rgba(255,255,255,0.2)',
+                                flexShrink: 0,
+                              }} />
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#f1f5f9' }}>{slot.label}</div>
+                                <div style={{ fontSize: 10, color: '#64748b', fontFamily: 'monospace' }}>{slot.slotId}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={td}>
+                            <span style={{ fontSize: 12, color: '#cbd5e1' }}>
+                              {typeIcon} {typeLabel}
+                            </span>
+                          </td>
+                          <td style={{ ...td, fontWeight: 700, color: slot.type === 'gold' ? C.yellow : C.green }}>
+                            +{slot.amount}
+                          </td>
+                          <td style={td}>
+                            <span style={{
+                              display: 'inline-flex', padding: '2px 8px', borderRadius: 5,
+                              fontSize: 10, fontWeight: 800, textTransform: 'uppercase',
+                              color: rarityColor, background: `${rarityColor}1a`, border: `1px solid ${rarityColor}33`,
+                            }}>
+                              {slot.rarity}
+                            </span>
+                          </td>
+                          <td style={{ ...td, fontWeight: 600, color: '#cbd5e1' }}>
+                            {slot.weight} súly
+                          </td>
+                          <td style={{ ...td, minWidth: 140 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ flex: 1, height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{
+                                  height: '100%',
+                                  width: `${Math.min(100, (slot.chancePercent || 0) * 2)}%`,
+                                  background: slot.color || '#6366f1',
+                                  borderRadius: 3,
+                                }} />
+                              </div>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#f1f5f9', minWidth: 42 }}>
+                                {slot.chancePercent ?? 0}%
+                              </span>
+                            </div>
+                          </td>
+                          <td style={td}>
+                            <span style={{
+                              display: 'inline-flex', padding: '2px 8px', borderRadius: 5,
+                              fontSize: 10, fontWeight: 700,
+                              color: slot.isActive !== false ? C.green : '#64748b',
+                              background: slot.isActive !== false ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.05)',
+                            }}>
+                              {slot.isActive !== false ? 'Aktív' : 'Inaktív'}
+                            </span>
+                          </td>
+                          <td style={td}>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                style={{ ...btn('ghost'), padding: '4px 9px', fontSize: 11 }}
+                                onClick={() => openEditWheelSlot(slot)}
+                                title="Szelet szerkesztése"
+                              >
+                                <I.Edit /> Szerkeszt
+                              </button>
+                              <button
+                                style={{ ...btn('danger'), padding: '4px 8px', fontSize: 11 }}
+                                onClick={() => deleteWheelSlot(slot._id, slot.label)}
+                                title="Szelet törlése"
+                              >
+                                <I.Trash />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {wheelSlots.length === 0 && (
+                      <tr>
+                        <td colSpan={8} style={{ ...td, textAlign: 'center', color: '#64748b', padding: '36px 16px' }}>
+                          Nincsenek beállított nyeremények. Kattints az „Alapértelmezett" gombra a visszaállításhoz!
                         </td>
                       </tr>
                     )}
@@ -1456,6 +1734,200 @@ export default function AdminDashboard() {
                   style={{ ...btn('success'), padding: '8px 18px', fontWeight: 700 }}
                 >
                   {pigeonSaving ? 'Mentés...' : '✓ Módosítások Mentése'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ══ WHEEL SLOT ADD / EDIT MODAL ══════════════════════════════════ */}
+      {wheelModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)',
+          backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 9999, padding: 20,
+        }}>
+          <div style={{
+            background: '#0e1322', border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 16, width: '100%', maxWidth: 480, maxHeight: '90vh',
+            overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.85)',
+          }}>
+            <div style={{
+              padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>
+                  {wheelModal === 'edit' ? '🎡 Szelet szerkesztése' : '🎡 Új nyeremény hozzáadása'}
+                </h3>
+                <span style={{ fontSize: 11, color: '#64748b' }}>
+                  Állítsd be a pörgetőkerék nyereményét, színét és nyerési esélysúlyát
+                </span>
+              </div>
+              <button
+                onClick={() => setWheelModal(null)}
+                style={{ background: 'transparent', border: 'none', color: '#64748b', fontSize: 20, cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={saveWheelSlot} style={{ padding: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Megjelenő Név / Címke (pl. 100 Arany)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={wheelForm.label}
+                    onChange={e => setWheelForm(prev => ({ ...prev, label: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Jutalom Típusa
+                  </label>
+                  <select
+                    value={wheelForm.type}
+                    onChange={e => setWheelForm(prev => ({ ...prev, type: e.target.value as any }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: '#161d30',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  >
+                    <option value="gold">🪙 Arany</option>
+                    <option value="seeds">🌾 Madármag</option>
+                    <option value="cages">🎁 Kalitka</option>
+                    <option value="xp">⭐ Dúcmester XP</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Mennyiség
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={wheelForm.amount}
+                    onChange={e => setWheelForm(prev => ({ ...prev, amount: +e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Esélysúly (Weight)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min={0.1}
+                    required
+                    value={wheelForm.weight}
+                    onChange={e => setWheelForm(prev => ({ ...prev, weight: +e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                  <span style={{ fontSize: 10, color: '#64748b' }}>Nagyobb súly = gyakoribb esély</span>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Ritkaság
+                  </label>
+                  <select
+                    value={wheelForm.rarity}
+                    onChange={e => setWheelForm(prev => ({ ...prev, rarity: e.target.value as any }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: '#161d30',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  >
+                    <option value="common">Common (Gyakori)</option>
+                    <option value="uncommon">Uncommon (Nem mindennapi)</option>
+                    <option value="rare">Rare (Ritka)</option>
+                    <option value="epic">Epic (Epikus)</option>
+                    <option value="legendary">Legendary (Legendás)</option>
+                    <option value="mythic">Mythic (Mitikus / Fődíj)</option>
+                  </select>
+                </div>
+
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Szelet Színe a Keréken
+                  </label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="color"
+                      value={wheelForm.color}
+                      onChange={e => setWheelForm(prev => ({ ...prev, color: e.target.value }))}
+                      style={{
+                        width: 44, height: 38, padding: 0, border: 'none', borderRadius: 8,
+                        background: 'transparent', cursor: 'pointer',
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={wheelForm.color}
+                      onChange={e => setWheelForm(prev => ({ ...prev, color: e.target.value }))}
+                      style={{
+                        flex: 1, padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                        color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#cbd5e1' }}>
+                    <input
+                      type="checkbox"
+                      checked={wheelForm.isActive}
+                      onChange={e => setWheelForm(prev => ({ ...prev, isActive: e.target.checked }))}
+                    />
+                    Aktív tétel a szerencsekeréken
+                  </label>
+                </div>
+              </div>
+
+              <div style={{
+                marginTop: 20, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)',
+                display: 'flex', justifyContent: 'flex-end', gap: 10,
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setWheelModal(null)}
+                  style={{ ...btn('ghost'), padding: '8px 14px' }}
+                >
+                  Mégse
+                </button>
+                <button
+                  type="submit"
+                  disabled={wheelSaving}
+                  style={{ ...btn('primary'), padding: '8px 18px', fontWeight: 700 }}
+                >
+                  {wheelSaving ? 'Mentés...' : 'Nyeremény mentése'}
                 </button>
               </div>
             </form>

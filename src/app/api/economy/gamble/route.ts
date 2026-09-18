@@ -1,23 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
+import WheelSlot from '@/models/WheelSlot';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
-export const GAMBLE_SLOTS = [
-  { id: 'gold_25', label: '25 Arany', type: 'gold', amount: 25, weight: 38, rarity: 'common', color: '#f59e0b' },
-  { id: 'gold_50', label: '50 Arany', type: 'gold', amount: 50, weight: 30, rarity: 'uncommon', color: '#10b981' },
-  { id: 'gold_100', label: '100 Arany', type: 'gold', amount: 100, weight: 15, rarity: 'rare', color: '#38bdf8' },
-  { id: 'seeds_15', label: '15 Madármag', type: 'seeds', amount: 15, weight: 9, rarity: 'uncommon', color: '#34d399' },
-  { id: 'gold_250', label: '250 Arany', type: 'gold', amount: 250, weight: 5, rarity: 'epic', color: '#a855f7' },
-  { id: 'gold_500', label: '500 Arany Jackpot!', type: 'gold', amount: 500, weight: 2.2, rarity: 'legendary', color: '#f43f5e' },
-  { id: 'gold_1000', label: '1000 Arany Királyi Kincs!', type: 'gold', amount: 1000, weight: 0.8, rarity: 'mythic', color: '#fbbf24' },
+export const DEFAULT_WHEEL_SLOTS = [
+  { slotId: 'gold_25', label: '25 Arany', type: 'gold', amount: 25, weight: 35, rarity: 'common', color: '#f59e0b', order: 0, isActive: true },
+  { slotId: 'gold_50', label: '50 Arany', type: 'gold', amount: 50, weight: 25, rarity: 'uncommon', color: '#10b981', order: 1, isActive: true },
+  { slotId: 'seeds_20', label: '20 Madármag', type: 'seeds', amount: 20, weight: 18, rarity: 'uncommon', color: '#34d399', order: 2, isActive: true },
+  { slotId: 'xp_50', label: '50 XP Bónusz', type: 'xp', amount: 50, weight: 12, rarity: 'rare', color: '#818cf8', order: 3, isActive: true },
+  { slotId: 'gold_150', label: '150 Arany', type: 'gold', amount: 150, weight: 6, rarity: 'epic', color: '#a855f7', order: 4, isActive: true },
+  { slotId: 'cage_1', label: '1 Új Kalitka', type: 'cages', amount: 1, weight: 2.5, rarity: 'legendary', color: '#ec4899', order: 5, isActive: true },
+  { slotId: 'gold_500', label: '500 Arany Jackpot!', type: 'gold', amount: 500, weight: 1.2, rarity: 'legendary', color: '#f43f5e', order: 6, isActive: true },
+  { slotId: 'gold_1000', label: '1000 Arany Kincs!', type: 'gold', amount: 1000, weight: 0.3, rarity: 'mythic', color: '#fbbf24', order: 7, isActive: true },
 ];
 
 const COOLDOWN_HOURS = 24;
+
+async function getActiveSlots() {
+  let slots = await WheelSlot.find({ isActive: true }).sort({ order: 1, createdAt: 1 }).lean();
+  if (!slots || slots.length === 0) {
+    const allSlots = await WheelSlot.find().lean();
+    if (!allSlots || allSlots.length === 0) {
+      await WheelSlot.insertMany(DEFAULT_WHEEL_SLOTS);
+      slots = await WheelSlot.find({ isActive: true }).sort({ order: 1, createdAt: 1 }).lean();
+    }
+  }
+  return slots && slots.length > 0 ? slots : DEFAULT_WHEEL_SLOTS;
+}
 
 export async function GET(req: NextRequest) {
   const auth = verifyAuth(req);
@@ -42,13 +56,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const slots = await getActiveSlots();
+
     return NextResponse.json(
       {
         canGamble,
         nextGambleAt: nextGambleAt ? nextGambleAt.toISOString() : null,
         gold: user.gold ?? 0,
         seeds: user.inventory?.seeds ?? 0,
-        slots: GAMBLE_SLOTS,
+        slots,
       },
       { status: 200, headers: CORS_HEADERS }
     );
@@ -84,32 +100,43 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const slots = await getActiveSlots();
+
     // Weighted random selection
-    const totalWeight = GAMBLE_SLOTS.reduce((acc, s) => acc + s.weight, 0);
+    const totalWeight = slots.reduce((acc: number, s: any) => acc + (s.weight || 1), 0);
     const rand = Math.random() * totalWeight;
     let cumulative = 0;
-    let chosenPrize = GAMBLE_SLOTS[0];
+    let chosenPrize = slots[0];
+    let targetIndex = 0;
 
-    for (const slot of GAMBLE_SLOTS) {
-      cumulative += slot.weight;
+    for (let i = 0; i < slots.length; i++) {
+      cumulative += slots[i].weight || 1;
       if (rand <= cumulative) {
-        chosenPrize = slot;
+        chosenPrize = slots[i];
+        targetIndex = i;
         break;
       }
     }
 
-    // Apply prize
+    // Apply prize to user inventory
+    if (!user.inventory) {
+      user.inventory = { seeds: 10, cages: 1 };
+    }
+
     if (chosenPrize.type === 'gold') {
       user.gold = (user.gold ?? 0) + chosenPrize.amount;
     } else if (chosenPrize.type === 'seeds') {
-      if (!user.inventory) user.inventory = { seeds: 10, cages: 1 };
       user.inventory.seeds = (user.inventory.seeds ?? 0) + chosenPrize.amount;
+    } else if (chosenPrize.type === 'cages') {
+      user.inventory.cages = (user.inventory.cages ?? 0) + chosenPrize.amount;
     }
 
-    // Award gamble spin XP
-    const xpEarned = 25;
+    // Award gamble spin XP (+25 default plus any extra XP prize)
+    const xpBonusPrize = chosenPrize.type === 'xp' ? chosenPrize.amount : 0;
+    const totalXpEarned = 25 + xpBonusPrize;
+
     let uLvl = user.level || 1;
-    let uXp = (user.xp || 0) + xpEarned;
+    let uXp = (user.xp || 0) + totalXpEarned;
     let userLeveledUp = false;
     while (uXp >= uLvl * 100) {
       uXp -= uLvl * 100;
@@ -137,12 +164,16 @@ export async function POST(req: NextRequest) {
         success: true,
         prize: chosenPrize,
         reward: chosenPrize,
-        xpEarned,
+        targetIndex,
+        winningIndex: targetIndex,
+        slots,
+        xpEarned: totalXpEarned,
         userLeveledUp,
         newUserLevel: user.level,
         newUserXp: user.xp,
         newGold: user.gold,
         newSeeds: user.inventory?.seeds,
+        newCages: user.inventory?.cages,
         nextGambleAt: nextGambleAt.toISOString(),
       },
       { status: 200, headers: CORS_HEADERS }
