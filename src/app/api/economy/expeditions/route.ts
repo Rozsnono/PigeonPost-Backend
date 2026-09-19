@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest) {
     // ─── 1. START EXPEDITION ──────────────────────────────────────────────────
     if (action === 'start') {
       const { pigeonId, destinationId, cityId } = body;
-      const targetCityId = cityId || destinationId;
+      const targetCityId = (cityId || destinationId || '').trim();
       if (!pigeonId || !targetCityId) {
         return NextResponse.json(
           { error: 'Madár és célváros megadása kötelező!' },
@@ -152,9 +153,27 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const city = await ExpeditionCity.findOne({
-        $or: [{ cityId: targetCityId }, { _id: targetCityId }],
-      });
+      const isObjectId = mongoose.Types.ObjectId.isValid(targetCityId) && targetCityId.length === 24;
+      let city = await ExpeditionCity.findOne(
+        isObjectId ? { $or: [{ cityId: targetCityId }, { _id: targetCityId }] } : { cityId: targetCityId }
+      );
+      if (!city) {
+        city = await ExpeditionCity.findOne({
+          $or: [
+            { cityId: targetCityId.toLowerCase() },
+            { name: new RegExp(`^${targetCityId}$`, 'i') },
+          ],
+        });
+      }
+
+      if (!city) {
+        const count = await ExpeditionCity.countDocuments();
+        if (count === 0) {
+          await ExpeditionCity.insertMany(DEFAULT_EXPEDITION_CITIES);
+          city = await ExpeditionCity.findOne({ cityId: targetCityId });
+        }
+      }
+
       if (!city) {
         return NextResponse.json(
           { error: 'A kiválasztott expedíciós város nem található!' },
@@ -168,6 +187,13 @@ export async function POST(req: NextRequest) {
       if ((user.level || 1) < (city.minLevel || 1)) {
         return NextResponse.json(
           { error: `Ehhez a városhoz legalább ${city.minLevel}. szintű Dúcmesternek kell lenned!` },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(pigeonId)) {
+        return NextResponse.json(
+          { error: 'Érvénytelen madár azonosító!' },
           { status: 400, headers: CORS_HEADERS }
         );
       }
@@ -278,8 +304,8 @@ export async function POST(req: NextRequest) {
     // ─── 2. CLAIM EXPEDITION REWARDS ──────────────────────────────────────────
     if (action === 'claim') {
       const { expeditionId } = body;
-      if (!expeditionId) {
-        return NextResponse.json({ error: 'Hiányzó expeditionId!' }, { status: 400, headers: CORS_HEADERS });
+      if (!expeditionId || !mongoose.Types.ObjectId.isValid(expeditionId)) {
+        return NextResponse.json({ error: 'Hiányzó vagy érvénytelen expeditionId!' }, { status: 400, headers: CORS_HEADERS });
       }
 
       const expedition = await Expedition.findById(expeditionId);
@@ -427,8 +453,11 @@ export async function POST(req: NextRequest) {
       { error: 'Érvénytelen action (start vagy claim szükséges)!' },
       { status: 400, headers: CORS_HEADERS }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('POST /api/economy/expeditions error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: CORS_HEADERS });
+    return NextResponse.json(
+      { error: error?.message || 'Belső szerverhiba történt az expedíció során!' },
+      { status: 500, headers: CORS_HEADERS }
+    );
   }
 }
