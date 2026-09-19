@@ -23,6 +23,8 @@ const BIRD_SIZE_RANK: Record<string, number> = {
   pigeon: 2,
   turtle_dove: 2,
   starling: 1,
+  peacock: 4,
+  penguin: 3,
 };
 
 function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -219,6 +221,18 @@ export async function POST(req: NextRequest) {
           { status: 400, headers: CORS_HEADERS }
         );
       }
+      if (pigeon.fatigue >= 100) {
+        return NextResponse.json(
+          { error: `"${pigeon.name}" teljesen kimerült (100% fáradtság)! Etesd meg a dúc vályújából vagy pihentesd indulás előtt.` },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+      if (pigeon.satiety !== undefined && pigeon.satiety <= 0) {
+        return NextResponse.json(
+          { error: `"${pigeon.name}" nagyon éhes (0% jóllakottság)! Tölts magot a dúc etetővályújába az indulás előtt.` },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
 
       const userLat = user.location?.lat || 47.4979;
       const userLng = user.location?.lng || 19.0402;
@@ -299,6 +313,7 @@ export async function POST(req: NextRequest) {
 
       pigeon.status = 'flying';
       pigeon.fatigue = Math.min(100, (pigeon.fatigue || 0) + Math.max(5, Math.round(effectiveDurationMinutes / 5)));
+      pigeon.satiety = Math.max(0, (pigeon.satiety ?? 100) - Math.max(8, Math.round(effectiveDurationMinutes / 4)));
       await pigeon.save();
 
       return NextResponse.json(

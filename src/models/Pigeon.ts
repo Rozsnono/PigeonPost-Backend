@@ -11,6 +11,7 @@ export interface IPigeon extends Document {
   journeysCount: number;
   status: 'idle' | 'flying' | 'returning' | 'resting' | 'dead';
   fatigue: number; // 0 to 100
+  satiety: number; // 0 to 100 (100 = full, 0 = starving)
   cooldownUntil?: Date; // When it finishes resting
   createdAt: Date;
   updatedAt: Date;
@@ -28,6 +29,7 @@ const PigeonSchema: Schema = new Schema(
     journeysCount: { type: Number, default: 0 },
     status: { type: String, enum: ['idle', 'flying', 'returning', 'resting', 'dead'], default: 'idle' },
     fatigue: { type: Number, default: 0, min: 0, max: 100 },
+    satiety: { type: Number, default: 100, min: 0, max: 100 },
     cooldownUntil: { type: Date, default: null },
   },
   {

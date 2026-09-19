@@ -92,6 +92,12 @@ export async function POST(req: NextRequest) {
       if (p.status !== 'idle') {
         return NextResponse.json({ error: `"${p.name}" jelenleg ${p.status} státuszban van, csak tétlen madár küldhető!` }, { status: 400, headers: CORS_HEADERS });
       }
+      if (p.fatigue >= 100) {
+        return NextResponse.json({ error: `"${p.name}" teljesen kimerült (100% fáradtság)! Etesd meg a dúc vályújából vagy pihentesd indulás előtt.` }, { status: 400, headers: CORS_HEADERS });
+      }
+      if (p.satiety !== undefined && p.satiety <= 0) {
+        return NextResponse.json({ error: `"${p.name}" éhes (0% jóllakottság)! Tölts magot a dúc etetővályújába az indulás előtt.` }, { status: 400, headers: CORS_HEADERS });
+      }
     }
 
     // Dynamic character limit: 500 characters per bird in the flock
@@ -175,6 +181,7 @@ export async function POST(req: NextRequest) {
       pigeons.map(async (p) => {
         p.status = 'flying';
         p.fatigue = Math.min(100, (p.fatigue || 0) + Math.round(distanceKm / 10));
+        p.satiety = Math.max(0, (p.satiety ?? 100) - Math.max(5, Math.round(distanceKm / 15)));
         await p.save();
       })
     );

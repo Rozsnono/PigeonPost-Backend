@@ -100,13 +100,32 @@ export const AVIARY_SPECIES = [
     minLevel: 6,
     sizeRank: 10,
   },
+  {
+    id: 'peacock',
+    name: 'Páva',
+    speedKmH: 110,
+    priceGold: 3500,
+    subtitle: 'Királyi pompás indiai páva',
+    requirementText: '3,500 arany',
+    minLevel: 3,
+    sizeRank: 5,
+  },
+  {
+    id: 'penguin',
+    name: 'Császárpingvin',
+    speedKmH: 95,
+    priceGold: 2800,
+    subtitle: 'Kitartó antarktiszi császárpingvin',
+    requirementText: '2,800 arany',
+    minLevel: 2,
+    sizeRank: 4,
+  },
 ];
 
 export async function ensureDefaultSpecies() {
-  const count = await BirdSpecies.countDocuments();
-  if (count === 0) {
-    console.log('[BirdSpecies] Seeding default 9 species into MongoDB...');
-    for (const spec of AVIARY_SPECIES) {
+  for (const spec of AVIARY_SPECIES) {
+    const exists = await BirdSpecies.findOne({ speciesId: spec.id });
+    if (!exists) {
       await BirdSpecies.create({
         speciesId: spec.id,
         name: spec.name,

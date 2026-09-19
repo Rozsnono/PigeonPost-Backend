@@ -613,6 +613,24 @@ export default function AdminDashboard() {
     if (r.ok) { toast$(`✓ ${d.message || name + ' hazatért!'}`); fetchPigeons(); fetchStats(); } else toast$(`✗ ${d.error || 'Sikertelen'}`);
   };
 
+  const accelerateAllFlights = async () => {
+    if (!confirm('⚡ Biztosan azonnal felgyorsítod és lezárod az ÖSSZES repülést, expedíciót, és hazahívod az összes repülő galambot a dúcba?')) return;
+    try {
+      const r = await fetch('/api/admin/flights', { method: 'POST', headers: hdr() });
+      const d = await r.json();
+      if (r.ok) {
+        toast$(`✓ ${d.message || 'Minden repülés azonnal befejezve!'}`);
+        fetchPigeons();
+        fetchStats();
+        fetchMsgs();
+      } else {
+        toast$(`✗ ${d.error || 'Sikertelen gyorsítás'}`);
+      }
+    } catch (err: any) {
+      toast$(`✗ Hiba: ${err.message}`);
+    }
+  };
+
   const openEditPigeon = (p: any) => {
     setEditingPigeon(p);
     setPigeonForm({
@@ -840,6 +858,26 @@ export default function AdminDashboard() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 11, color: '#374151', fontFamily: 'monospace', background: 'rgba(255,255,255,0.04)', padding: '4px 10px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.06)' }}>{stats?.serverTime ?? '—'}</span>
+            <button
+              onClick={accelerateAllFlights}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '7px 14px',
+                background: 'linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(239,68,68,0.2) 100%)',
+                border: '1px solid rgba(245,158,11,0.4)',
+                borderRadius: 9,
+                cursor: 'pointer',
+                fontSize: 12,
+                color: '#fbbf24',
+                fontWeight: 700,
+                boxShadow: '0 2px 8px rgba(245,158,11,0.2)',
+              }}
+              title="Minden aktív repülő galambot, levelet és expedíciót azonnal lezár és hazaérkeztet"
+            >
+              ⚡ Repülések gyorsítása
+            </button>
             <button onClick={refresh} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 9, cursor: 'pointer', fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>
               <div style={{ transform: spinning ? 'rotate(360deg)' : 'none', transition: 'transform 0.5s' }}><I.Refresh /></div>Frissítés
             </button>

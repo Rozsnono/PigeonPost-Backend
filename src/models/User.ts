@@ -80,6 +80,7 @@ export interface IUser extends Document {
   };
   claimedMilestones?: string[];
   totalKmExplored?: number;
+  feederSeeds?: number; // Seeds currently in the loft's trough
 
   isDeleted: boolean;
   deletedAt?: Date;
@@ -99,6 +100,7 @@ const UserSchema: Schema = new Schema(
       seeds: { type: Number, default: 10 },
       cages: { type: Number, default: 1 },
     },
+    feederSeeds: { type: Number, default: 0, min: 0 },
     stats: {
       sentCount: { type: Number, default: 0 },
       receivedCount: { type: Number, default: 0 },
