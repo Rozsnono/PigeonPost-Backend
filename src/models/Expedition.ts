@@ -13,6 +13,8 @@ export interface IExpedition extends Document {
   pigeonId: mongoose.Types.ObjectId;
   destinationName: string;
   cityId?: string;
+  destinationLat?: number;
+  destinationLng?: number;
   distanceKm?: number;
   durationMinutes: number;
   dispatchedAt: Date;
@@ -33,6 +35,8 @@ const ExpeditionSchema: Schema = new Schema(
     pigeonId: { type: Schema.Types.ObjectId, ref: 'Pigeon', required: true },
     destinationName: { type: String, required: true },
     cityId: { type: String, default: null },
+    destinationLat: { type: Number, default: null },
+    destinationLng: { type: Number, default: null },
     distanceKm: { type: Number, default: 50 },
     durationMinutes: { type: Number, required: true },
     dispatchedAt: { type: Date, required: true },

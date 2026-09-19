@@ -99,6 +99,8 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: -1 })
       .lean();
 
+    const citiesMap = new Map(cities.map((c: any) => [c.cityId, c]));
+
     // Auto-update completed expeditions
     const formatted = expeditions.map((exp: any) => {
       const returnTime = new Date(exp.estimatedReturnAt).getTime();
@@ -112,8 +114,14 @@ export async function GET(req: NextRequest) {
         Expedition.findByIdAndUpdate(exp._id, { status: 'completed' }).exec();
       }
 
+      const city = exp.cityId ? citiesMap.get(exp.cityId) : null;
+
       return {
         ...exp,
+        destinationLat: exp.destinationLat ?? city?.lat,
+        destinationLng: exp.destinationLng ?? city?.lng,
+        destinationCountry: city?.country,
+        destinationIcon: city?.icon || 'monument',
         isCompleted,
         minutesLeft,
         progress,
@@ -275,6 +283,8 @@ export async function POST(req: NextRequest) {
         pigeonId: pigeon._id,
         destinationName: `${city.name} (${city.country})`,
         cityId: city.cityId,
+        destinationLat: city.lat,
+        destinationLng: city.lng,
         distanceKm: distKm,
         durationMinutes: effectiveDurationMinutes,
         dispatchedAt: now,
