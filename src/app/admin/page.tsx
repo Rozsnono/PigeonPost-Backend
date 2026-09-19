@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import MapPickerModal from '@/components/admin/MapPickerModal';
 
 const I = {
   Users: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
@@ -194,6 +195,7 @@ export default function AdminDashboard() {
   });
   const [stampInput, setStampInput] = useState({ code: '', name: '' });
   const [citySaving, setCitySaving] = useState(false);
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
@@ -2330,6 +2332,47 @@ export default function AdminDashboard() {
                   />
                 </div>
 
+                {/* Map Picker Trigger Banner */}
+                <div style={{
+                  gridColumn: 'span 2',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'rgba(99,102,241,0.1)',
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(99,102,241,0.25)',
+                }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9' }}>
+                      📍 Földrajzi Koordináták
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                      Kijelölheted interaktív térképre kattintva, vagy megadhatod kézzel is:
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMapPickerOpen(true)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 14px',
+                      background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                      border: 'none',
+                      borderRadius: 8,
+                      color: '#ffffff',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 12px rgba(99,102,241,0.35)',
+                    }}
+                  >
+                    🗺️ Térkép Megnyitása & Kijelölés
+                  </button>
+                </div>
+
                 <div>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
                     Szélességi fok (Latitude) *
@@ -2574,6 +2617,23 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* ══ INTERACTIVE MAP PICKER MODAL ══════════════════════════ */}
+      <MapPickerModal
+        visible={mapPickerOpen}
+        initialLat={cityForm.lat}
+        initialLng={cityForm.lng}
+        onSelect={({ lat, lng, cityName, countryName }) => {
+          setCityForm(prev => ({
+            ...prev,
+            lat,
+            lng,
+            name: prev.name.trim() ? prev.name : (cityName || prev.name),
+            country: prev.country.trim() ? prev.country : (countryName || prev.country),
+          }));
+        }}
+        onClose={() => setMapPickerOpen(false)}
+      />
     </div>
   );
 }
