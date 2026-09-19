@@ -3,6 +3,7 @@ import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
 import Expedition from '@/models/Expedition';
+import ExpeditionCity, { DEFAULT_EXPEDITION_CITIES } from '@/models/ExpeditionCity';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 
 export async function OPTIONS() {
@@ -23,60 +24,19 @@ const BIRD_SIZE_RANK: Record<string, number> = {
   starling: 1,
 };
 
-export const EXPEDITION_DESTINATIONS = [
-  {
-    id: 'valley_scout',
-    name: 'Közeli Vadvölgy',
-    description: 'Rövid felderítő repülés az erdőszélen és a patakparton.',
-    durationMinutes: 30,
-    distanceKm: 25,
-    minGold: 25,
-    maxGold: 45,
-    minSeeds: 5,
-    maxSeeds: 10,
-    minLevel: 1,
-    icon: 'valley',
-  },
-  {
-    id: 'mountain_ridge',
-    name: 'Bükki Hegygerinc',
-    description: 'Közepes távú repülés a magas hegygerincek és fenyvesek felett.',
-    durationMinutes: 60,
-    distanceKm: 70,
-    minGold: 60,
-    maxGold: 95,
-    minSeeds: 10,
-    maxSeeds: 20,
-    minLevel: 1,
-    icon: 'mountain',
-  },
-  {
-    id: 'ancient_ruins',
-    name: 'Ősi Várromok',
-    description: 'Hosszú expedíció a középkori várromok és kincses pincék környékére.',
-    durationMinutes: 120,
-    distanceKm: 160,
-    minGold: 130,
-    maxGold: 210,
-    minSeeds: 20,
-    maxSeeds: 35,
-    minLevel: 2,
-    icon: 'castle',
-  },
-  {
-    id: 'coastal_cliffs',
-    name: 'Viharos Tengerpart',
-    description: 'Nagy kihívást jelentő, egész délutános repülés a tengerparti szirtekre.',
-    durationMinutes: 240,
-    distanceKm: 350,
-    minGold: 280,
-    maxGold: 440,
-    minSeeds: 40,
-    maxSeeds: 70,
-    minLevel: 2,
-    icon: 'coast',
-  },
-];
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.max(15, Math.round(R * c));
+}
 
 export async function GET(req: NextRequest) {
   const auth = verifyAuth(req);
@@ -85,8 +45,55 @@ export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
 
+    const user = await User.findById(auth.userId).select('location stamps').lean();
+    const userLat = (user as any)?.location?.lat || 47.4979;
+    const userLng = (user as any)?.location?.lng || 19.0402;
+
+    // Load active expedition cities from DB, or seed defaults
+    let cities = await ExpeditionCity.find({ isActive: true }).sort({ order: 1, createdAt: 1 }).lean();
+    if (!cities || cities.length === 0) {
+      await ExpeditionCity.insertMany(DEFAULT_EXPEDITION_CITIES);
+      cities = await ExpeditionCity.find({ isActive: true }).sort({ order: 1, createdAt: 1 }).lean();
+    }
+
+    const destinations = cities.map((city: any) => {
+      const distKm = calculateDistanceKm(userLat, userLng, city.lat, city.lng);
+      const mult = city.rewardMultiplier || 1.0;
+      // Duration estimation at baseline 80 km/h speed
+      const durationMinutes = Math.max(15, Math.round((distKm / 80) * 60));
+
+      const minGold = Math.max(25, Math.round(distKm * 0.45 * mult));
+      const maxGold = Math.max(45, Math.round(distKm * 0.85 * mult));
+      const minSeeds = Math.max(5, Math.round((distKm / 15) * Math.min(2.0, mult)));
+      const maxSeeds = Math.max(10, Math.round((distKm / 8) * Math.min(2.0, mult)));
+
+      return {
+        id: city.cityId,
+        cityId: city.cityId,
+        name: city.name,
+        country: city.country,
+        lat: city.lat,
+        lng: city.lng,
+        description: city.description,
+        icon: city.icon || 'monument',
+        minLevel: city.minLevel || 1,
+        rewardMultiplier: mult,
+        cageDropChance: city.cageDropChance || 5,
+        stamps: city.stamps || [],
+        distanceKm: distKm,
+        durationMinutes,
+        minGold,
+        maxGold,
+        minSeeds,
+        maxSeeds,
+      };
+    });
+
     const now = new Date();
-    const expeditions = await Expedition.find({ userId: auth.userId, status: { $in: ['exploring', 'completed'] } })
+    const expeditions = await Expedition.find({
+      userId: auth.userId,
+      status: { $in: ['exploring', 'completed'] },
+    })
       .populate('pigeonId', 'name species level status')
       .sort({ createdAt: -1 })
       .lean();
@@ -96,7 +103,7 @@ export async function GET(req: NextRequest) {
       const returnTime = new Date(exp.estimatedReturnAt).getTime();
       const isCompleted = now.getTime() >= returnTime || exp.status === 'completed';
       const minutesLeft = Math.max(0, Math.round((returnTime - now.getTime()) / 60000));
-      const totalDuration = exp.durationMinutes * 60000;
+      const totalDuration = (exp.durationMinutes || 30) * 60000;
       const elapsed = Math.max(0, now.getTime() - new Date(exp.dispatchedAt).getTime());
       const progress = isCompleted ? 100 : Math.min(99, Math.round((elapsed / totalDuration) * 100));
 
@@ -115,7 +122,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         expeditions: formatted,
-        destinations: EXPEDITION_DESTINATIONS,
+        destinations,
       },
       { status: 200, headers: CORS_HEADERS }
     );
@@ -136,66 +143,121 @@ export async function POST(req: NextRequest) {
 
     // ─── 1. START EXPEDITION ──────────────────────────────────────────────────
     if (action === 'start') {
-      const { pigeonId, destinationId } = body;
-      if (!pigeonId || !destinationId) {
-        return NextResponse.json({ error: 'Madár és célállomás megadása kötelező!' }, { status: 400, headers: CORS_HEADERS });
+      const { pigeonId, destinationId, cityId } = body;
+      const targetCityId = cityId || destinationId;
+      if (!pigeonId || !targetCityId) {
+        return NextResponse.json(
+          { error: 'Madár és célváros megadása kötelező!' },
+          { status: 400, headers: CORS_HEADERS }
+        );
       }
 
-      const dest = EXPEDITION_DESTINATIONS.find((d) => d.id === destinationId);
-      if (!dest) {
-        return NextResponse.json({ error: 'Érvénytelen célállomás!' }, { status: 400, headers: CORS_HEADERS });
+      const city = await ExpeditionCity.findOne({
+        $or: [{ cityId: targetCityId }, { _id: targetCityId }],
+      });
+      if (!city) {
+        return NextResponse.json(
+          { error: 'A kiválasztott expedíciós város nem található!' },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+
+      const user = await User.findById(auth.userId);
+      if (!user) return unauthorizedResponse();
+
+      if ((user.level || 1) < (city.minLevel || 1)) {
+        return NextResponse.json(
+          { error: `Ehhez a városhoz legalább ${city.minLevel}. szintű Dúcmesternek kell lenned!` },
+          { status: 400, headers: CORS_HEADERS }
+        );
       }
 
       const pigeon = await Pigeon.findById(pigeonId);
       if (!pigeon || pigeon.ownerId.toString() !== auth.userId) {
-        return NextResponse.json({ error: 'A kiválasztott madár nem található a dúcodban!' }, { status: 404, headers: CORS_HEADERS });
+        return NextResponse.json(
+          { error: 'A kiválasztott madár nem található a dúcodban!' },
+          { status: 404, headers: CORS_HEADERS }
+        );
       }
       if (pigeon.status !== 'idle') {
-        return NextResponse.json({ error: `A madár jelenleg ${pigeon.status} állapotban van, csak tétlen madár indítható útnak!` }, { status: 400, headers: CORS_HEADERS });
+        return NextResponse.json(
+          { error: `A madár jelenleg ${pigeon.status} állapotban van, csak tétlen madár indítható útnak!` },
+          { status: 400, headers: CORS_HEADERS }
+        );
       }
 
-      const now = new Date();
+      const userLat = user.location?.lat || 47.4979;
+      const userLng = user.location?.lng || 19.0402;
+      const distKm = calculateDistanceKm(userLat, userLng, city.lat, city.lng);
 
-      // ─── BIRD QUALITY & SPEED SCALING ──────────────────────────────
+      // Bird quality & speed scaling
       const birdSpeed = Math.max(60, pigeon.speedKmH || 80);
       const birdLevel = Math.max(1, pigeon.level || 1);
       const sizeRank = BIRD_SIZE_RANK[pigeon.species] || 2;
 
-      // Speed scaling: Baseline is 80 km/h. Faster birds complete expedition MUCH quicker!
-      // (e.g., 160 km/h cuts base duration in half; 300 km/h cuts to ~27% time)
+      // Flight time scaling
       const speedFactor = Math.max(0.25, 80 / birdSpeed);
-      // Each level further optimizes flight stamina by 5% (up to 20% bonus)
       const levelSpeedBonus = 1 - Math.min(0.20, (birdLevel - 1) * 0.05);
-      const effectiveDurationMinutes = Math.max(2, Math.round(dest.durationMinutes * speedFactor * levelSpeedBonus));
+      const baseDurationMinutes = Math.max(15, Math.round((distKm / 80) * 60));
+      const effectiveDurationMinutes = Math.max(
+        3,
+        Math.round(baseDurationMinutes * speedFactor * levelSpeedBonus)
+      );
 
+      const now = new Date();
       const estimatedReturnAt = new Date(now.getTime() + effectiveDurationMinutes * 60000);
 
-      // Value & Reward scaling: Better birds find significantly more loot and seeds!
-      // 1. Level bonus: +20% per level above 1
+      // Value & Reward scaling with City Multiplier
       const levelMultiplier = 1 + (birdLevel - 1) * 0.20;
-      // 2. Speed bonus: Faster birds scour deeper regions (+1% per 1.3 km/h above 80)
       const speedRewardMultiplier = 1 + Math.max(0, (birdSpeed - 80) / 130);
-      // 3. Species / size tier bonus (+12% per rank above 2)
       const rankMultiplier = 1 + Math.max(0, (sizeRank - 2) * 0.12);
+      const cityMult = city.rewardMultiplier || 1.0;
+      const totalRewardMultiplier = levelMultiplier * speedRewardMultiplier * rankMultiplier * cityMult;
 
-      const totalRewardMultiplier = levelMultiplier * speedRewardMultiplier * rankMultiplier;
+      const baseGold = distKm * (0.55 + Math.random() * 0.35);
+      const gold = Math.max(25, Math.round(baseGold * totalRewardMultiplier));
 
-      const baseGold = dest.minGold + Math.random() * (dest.maxGold - dest.minGold);
-      const gold = Math.round(baseGold * totalRewardMultiplier);
-
-      const baseSeeds = dest.minSeeds + Math.random() * (dest.maxSeeds - dest.minSeeds);
+      const baseSeeds = (distKm / 12) * (0.8 + Math.random() * 0.4);
       const seedBonus = 1 + (birdLevel - 1) * 0.15 + (birdSpeed >= 120 ? 0.35 : 0);
-      const seeds = Math.round(baseSeeds * seedBonus);
+      const seeds = Math.max(5, Math.round(baseSeeds * seedBonus));
+
+      // Cage drop chance roll
+      const rollCage = Math.random() * 100;
+      const wonCage = rollCage < (city.cageDropChance || 5) ? 1 : 0;
+
+      // Stamp roll: Pick 1 stamp from city's possible stamps, prioritizing uncollected ones
+      let wonStamp = null;
+      if (city.stamps && city.stamps.length > 0) {
+        const userStampIds = new Set((user.stamps || []).map((s: any) => s.id || s.code));
+        const uncollectedStamps = city.stamps.filter(
+          (s: any) => !userStampIds.has(s.id) && !userStampIds.has(s.code)
+        );
+
+        const candidates = uncollectedStamps.length > 0 ? uncollectedStamps : city.stamps;
+        const selected = candidates[Math.floor(Math.random() * candidates.length)];
+        wonStamp = {
+          id: selected.id,
+          code: selected.code,
+          name: selected.name,
+          country: selected.country || city.country,
+          image: selected.image || null,
+        };
+      }
 
       const expedition = await Expedition.create({
         userId: auth.userId,
         pigeonId: pigeon._id,
-        destinationName: dest.name,
+        destinationName: `${city.name} (${city.country})`,
+        cityId: city.cityId,
+        distanceKm: distKm,
         durationMinutes: effectiveDurationMinutes,
         dispatchedAt: now,
         estimatedReturnAt,
         rewardGold: gold,
         rewardSeeds: seeds,
+        rewardCages: wonCage,
+        rewardStamp: wonStamp,
+        rewardStampId: wonStamp?.id || null,
         status: 'exploring',
       });
 
@@ -206,7 +268,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          message: `${pigeon.name} sikeresen útnak indult felfedezni: ${dest.name}!`,
+          message: `${pigeon.name} sikeresen elindult ${city.name} (${city.country}) felé!`,
           expedition,
         },
         { status: 201, headers: CORS_HEADERS }
@@ -235,21 +297,61 @@ export async function POST(req: NextRequest) {
 
       // Credit rewards & XP to user
       const user = await User.findById(auth.userId);
-      const userXpEarned = Math.max(25, Math.round((expedition.durationMinutes || 30) * 1.2 + (expedition.rewardGold || 30) * 0.35));
+      const dist = expedition.distanceKm || 60;
+      const userXpEarned = Math.max(30, Math.round(dist * 0.4 + (expedition.rewardGold || 30) * 0.3));
       let userLeveledUp = false;
+
+      let awardedStamp = null;
+      let isNewStamp = false;
+      const awardedCages = expedition.rewardCages || 0;
 
       if (user) {
         user.gold = (user.gold ?? 0) + expedition.rewardGold;
         if (!user.inventory) user.inventory = { seeds: 10, cages: 1 };
         user.inventory.seeds = (user.inventory.seeds ?? 0) + expedition.rewardSeeds;
-        user.totalKmExplored = (user.totalKmExplored ?? 0) + Math.round((expedition.durationMinutes || 30) * 1.5);
+        if (awardedCages > 0) {
+          user.inventory.cages = (user.inventory.cages ?? 1) + awardedCages;
+        }
 
+        user.totalKmExplored = (user.totalKmExplored ?? 0) + dist;
+
+        // Add stamp to user collection if won
+        if (expedition.rewardStamp && expedition.rewardStamp.id) {
+          if (!user.stamps) user.stamps = [];
+          const existingStampIdx = user.stamps.findIndex(
+            (s: any) => s.id === expedition.rewardStamp.id || s.code === expedition.rewardStamp.code
+          );
+
+          if (existingStampIdx >= 0) {
+            user.stamps[existingStampIdx].count = (user.stamps[existingStampIdx].count || 1) + 1;
+            awardedStamp = {
+              ...expedition.rewardStamp,
+              count: user.stamps[existingStampIdx].count,
+            };
+            isNewStamp = false;
+          } else {
+            const newStampObj = {
+              id: expedition.rewardStamp.id,
+              code: expedition.rewardStamp.code,
+              name: expedition.rewardStamp.name,
+              country: expedition.rewardStamp.country,
+              count: 1,
+              image: expedition.rewardStamp.image || undefined,
+              unlockedAt: new Date(),
+            };
+            user.stamps.push(newStampObj);
+            awardedStamp = newStampObj;
+            isNewStamp = true;
+          }
+        }
+
+        // XP & Level-up handling
         let uLvl = user.level || 1;
         let uXp = (user.xp || 0) + userXpEarned;
         while (uXp >= uLvl * 100) {
           uXp -= uLvl * 100;
           uLvl += 1;
-          user.gold += uLvl * 25; // Level up bonus
+          user.gold += uLvl * 30; // Level up bonus
           userLeveledUp = true;
         }
         user.level = uLvl;
@@ -259,7 +361,7 @@ export async function POST(req: NextRequest) {
 
       // Restore pigeon to idle & award Pigeon XP
       let pigeonLeveledUp = false;
-      const pigeonXpEarned = Math.max(30, Math.round((expedition.durationMinutes || 30) * 1.5 + (expedition.rewardGold || 30) * 0.4));
+      const pigeonXpEarned = Math.max(35, Math.round(dist * 0.5 + 15));
       let pigeonName = 'A madár';
       let pigeonLevel = 1;
       let pigeonXp = 0;
@@ -293,6 +395,9 @@ export async function POST(req: NextRequest) {
           success: true,
           goldEarned: expedition.rewardGold,
           seedsEarned: expedition.rewardSeeds,
+          cagesEarned: awardedCages,
+          stampEarned: awardedStamp,
+          isNewStamp,
           userXpEarned,
           pigeonXpEarned,
           userLeveledUp,
@@ -305,17 +410,23 @@ export async function POST(req: NextRequest) {
           reward: {
             gold: expedition.rewardGold,
             seeds: expedition.rewardSeeds,
+            cages: awardedCages,
+            stamp: awardedStamp,
             xp: userXpEarned,
             pigeonXp: pigeonXpEarned,
           },
           newGold: user?.gold,
           newSeeds: user?.inventory?.seeds,
+          newCages: user?.inventory?.cages,
         },
         { status: 200, headers: CORS_HEADERS }
       );
     }
 
-    return NextResponse.json({ error: 'Érvénytelen action (start vagy claim szükséges)!' }, { status: 400, headers: CORS_HEADERS });
+    return NextResponse.json(
+      { error: 'Érvénytelen action (start vagy claim szükséges)!' },
+      { status: 400, headers: CORS_HEADERS }
+    );
   } catch (error) {
     console.error('POST /api/economy/expeditions error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: CORS_HEADERS });

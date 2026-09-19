@@ -25,9 +25,11 @@ const I = {
   Plus: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
   Edit: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
   Upload: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
+  Compass: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>,
+  Stamp: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="12" cy="12" r="4"/><path d="m16 8 2-2"/><path d="m8 16-2 2"/></svg>,
 };
 
-type Tab = 'overview' | 'users' | 'pigeons' | 'species' | 'wheel' | 'messages' | 'activity';
+type Tab = 'overview' | 'users' | 'pigeons' | 'species' | 'expeditions' | 'wheel' | 'messages' | 'activity';
 
 const C = {
   purple: '#818cf8', blue: '#60a5fa', green: '#34d399', red: '#f87171', yellow: '#fbbf24', amber: '#fbbf24'
@@ -171,6 +173,28 @@ export default function AdminDashboard() {
   });
   const [wheelSaving, setWheelSaving] = useState(false);
 
+  // Expedition Cities State
+  const [cities, setCities] = useState<any[]>([]);
+  const [cityModal, setCityModal] = useState<'add' | 'edit' | null>(null);
+  const [editingCity, setEditingCity] = useState<any | null>(null);
+  const [cityForm, setCityForm] = useState({
+    cityId: '',
+    name: '',
+    country: '',
+    lat: 47.4979,
+    lng: 19.0402,
+    description: '',
+    icon: 'monument',
+    minLevel: 1,
+    rewardMultiplier: 1.0,
+    cageDropChance: 5,
+    stamps: [] as Array<{ id?: string; code: string; name: string; country?: string }>,
+    isActive: true,
+    order: 0,
+  });
+  const [stampInput, setStampInput] = useState({ code: '', name: '' });
+  const [citySaving, setCitySaving] = useState(false);
+
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
   const hdr = useCallback(() => ({ Authorization: `Bearer ${secret}` }), [secret]);
@@ -180,6 +204,15 @@ export default function AdminDashboard() {
   const fetchUsers   = useCallback(async () => { try { const r = await fetch('/api/admin/users',   { headers: hdr() }); if (r.ok) setUsers(await r.json()); } catch {} }, [hdr]);
   const fetchPigeons = useCallback(async () => { try { const r = await fetch('/api/admin/pigeons', { headers: hdr() }); if (r.ok) setPigeons(await r.json()); } catch {} }, [hdr]);
   const fetchSpecies = useCallback(async () => { try { const r = await fetch('/api/admin/species', { headers: hdr() }); if (r.ok) setSpeciesList(await r.json()); } catch {} }, [hdr]);
+  const fetchCities  = useCallback(async () => {
+    try {
+      const r = await fetch('/api/admin/expeditions/cities', { headers: hdr() });
+      if (r.ok) {
+        const d = await r.json();
+        setCities(d.cities || []);
+      }
+    } catch {}
+  }, [hdr]);
   const fetchWheel   = useCallback(async () => {
     try {
       const r = await fetch('/api/admin/wheel', { headers: hdr() });
@@ -207,6 +240,7 @@ export default function AdminDashboard() {
       fetchSpecies();
     }
     if (tab === 'species') fetchSpecies();
+    if (tab === 'expeditions') fetchCities();
     if (tab === 'wheel') fetchWheel();
     if (tab === 'messages') fetchMsgs();
   }, [tab, authed]);
@@ -220,6 +254,7 @@ export default function AdminDashboard() {
       await fetchSpecies();
     }
     if (tab === 'species') await fetchSpecies();
+    if (tab === 'expeditions') await fetchCities();
     if (tab === 'wheel') await fetchWheel();
     if (tab === 'messages') await fetchMsgs();
     setTimeout(() => setSpinning(false), 500);
@@ -433,6 +468,122 @@ export default function AdminDashboard() {
     }
   };
 
+  // Expedition City CRUD Handlers
+  const openAddCity = () => {
+    setEditingCity(null);
+    setCityForm({
+      cityId: '',
+      name: '',
+      country: '',
+      lat: 47.4979,
+      lng: 19.0402,
+      description: '',
+      icon: 'monument',
+      minLevel: 1,
+      rewardMultiplier: 1.0,
+      cageDropChance: 5,
+      stamps: [],
+      isActive: true,
+      order: cities.length + 1,
+    });
+    setStampInput({ code: '', name: '' });
+    setCityModal('add');
+  };
+
+  const openEditCity = (c: any) => {
+    setEditingCity(c);
+    setCityForm({
+      cityId: c.cityId || '',
+      name: c.name || '',
+      country: c.country || '',
+      lat: c.lat ?? 47.4979,
+      lng: c.lng ?? 19.0402,
+      description: c.description || '',
+      icon: c.icon || 'monument',
+      minLevel: c.minLevel ?? 1,
+      rewardMultiplier: c.rewardMultiplier ?? 1.0,
+      cageDropChance: c.cageDropChance ?? 5,
+      stamps: Array.isArray(c.stamps) ? [...c.stamps] : [],
+      isActive: c.isActive !== false,
+      order: c.order ?? 0,
+    });
+    setStampInput({ code: '', name: '' });
+    setCityModal('edit');
+  };
+
+  const addStampToForm = () => {
+    if (!stampInput.code.trim() || !stampInput.name.trim()) {
+      toast$('✗ A bélyeg kódja és neve kötelező!');
+      return;
+    }
+    const cleanCode = stampInput.code.trim().toUpperCase();
+    const cleanName = stampInput.name.trim();
+    const id = `stamp_${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+
+    setCityForm(prev => ({
+      ...prev,
+      stamps: [...prev.stamps, { id, code: cleanCode, name: cleanName, country: prev.country || 'Ismeretlen' }],
+    }));
+    setStampInput({ code: '', name: '' });
+  };
+
+  const removeStampFromForm = (idx: number) => {
+    setCityForm(prev => ({
+      ...prev,
+      stamps: prev.stamps.filter((_, i) => i !== idx),
+    }));
+  };
+
+  const saveCity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCitySaving(true);
+    try {
+      const payload: any = { ...cityForm };
+      if (editingCity?._id) payload._id = editingCity._id;
+      const r = await fetch('/api/admin/expeditions/cities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...hdr() },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        toast$(`✓ ${d.message || 'Expedíciós város mentve!'}`);
+        setCityModal(null);
+        fetchCities();
+      } else {
+        toast$(`✗ ${d.error || 'Sikertelen mentés'}`);
+      }
+    } catch (err: any) {
+      toast$(`✗ Hiba: ${err.message}`);
+    } finally {
+      setCitySaving(false);
+    }
+  };
+
+  const deleteCity = async (id: string, name: string) => {
+    if (!confirm(`Biztosan törölni szeretnéd a(z) „${name}" várost az expedíciók közül?`)) return;
+    const r = await fetch(`/api/admin/expeditions/cities?id=${id}`, { method: 'DELETE', headers: hdr() });
+    const d = await r.json();
+    if (r.ok) {
+      toast$(`✓ ${name} törölve`);
+      fetchCities();
+    } else {
+      toast$(`✗ ${d.error || 'Sikertelen törlés'}`);
+    }
+  };
+
+  const resetCityDefaults = async () => {
+    if (!confirm('Biztosan visszaállítod az expedíciós városokat és bélyegeiket az alapértelmezett világvárosokra?')) return;
+    const r = await fetch('/api/admin/expeditions/cities', { method: 'PUT', headers: hdr() });
+    const d = await r.json();
+    if (r.ok) {
+      toast$(`✓ ${d.message || 'Alapértelmezett városok visszaállítva!'}`);
+      fetchCities();
+    } else {
+      toast$(`✗ ${d.error || 'Sikertelen visszaállítás'}`);
+    }
+  };
+
   const giveItem = async (ep: string, uid: string, uname: string, label: string) => {
     const amt = prompt(`Mennyi ${label} adjunk ${uname} számára?`);
     if (!amt || isNaN(+amt)) return;
@@ -570,8 +721,9 @@ export default function AdminDashboard() {
     { id: 'overview',  label: 'Áttekintés',     Icon: I.Chart,    badge: undefined },
     { id: 'users',     label: 'Felhasználók',   Icon: I.Users,    badge: stats?.stats?.activeUsers },
     { id: 'pigeons',   label: 'Galambok',       Icon: I.Pigeon,   badge: stats?.stats?.flyingPigeons },
-    { id: 'species',   label: 'Madárfajták',    Icon: I.Feather,  badge: speciesList.length },
-    { id: 'wheel',     label: 'Szerencsekerék', Icon: I.Zap,      badge: wheelSlots.length },
+    { id: 'species',     label: 'Madárfajták',    Icon: I.Feather,  badge: speciesList.length },
+    { id: 'expeditions', label: 'Expedíciók',     Icon: I.Compass,  badge: cities.length },
+    { id: 'wheel',       label: 'Szerencsekerék', Icon: I.Zap,      badge: wheelSlots.length },
     { id: 'messages',  label: 'Üzenetek',       Icon: I.Mail,     badge: msgs?.stats?.flyingMessages },
     { id: 'activity',  label: 'Aktivitás',      Icon: I.Activity, badge: undefined },
   ];
@@ -651,7 +803,7 @@ export default function AdminDashboard() {
         <header style={{ height: 58, background: 'rgba(11,15,26,0.85)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 22px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', margin: 0 }}>{navItems.find(n => n.id === tab)?.label}</h2>
-            {(tab === 'users' || tab === 'pigeons' || tab === 'species' || tab === 'wheel') && (
+            {(tab === 'users' || tab === 'pigeons' || tab === 'species' || tab === 'expeditions' || tab === 'wheel') && (
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#475569', pointerEvents: 'none' }}><I.Search /></div>
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Keresés..."
@@ -662,6 +814,16 @@ export default function AdminDashboard() {
               <button onClick={openAddSpecies} style={{ ...btn('primary'), padding: '7px 14px', fontSize: 13, fontWeight: 700, marginLeft: 4 }}>
                 <I.Plus />Új madárfajta
               </button>
+            )}
+            {tab === 'expeditions' && (
+              <div style={{ display: 'flex', gap: 8, marginLeft: 4 }}>
+                <button onClick={openAddCity} style={{ ...btn('primary'), padding: '7px 14px', fontSize: 13, fontWeight: 700 }}>
+                  <I.Plus />Új Város
+                </button>
+                <button onClick={resetCityDefaults} style={{ ...btn('ghost'), padding: '7px 12px', fontSize: 12 }}>
+                  <I.Refresh />Alapértelmezett Városok
+                </button>
+              </div>
             )}
             {tab === 'wheel' && (
               <div style={{ display: 'flex', gap: 8, marginLeft: 4 }}>
@@ -1068,6 +1230,174 @@ export default function AdminDashboard() {
                       <tr>
                         <td colSpan={9} style={{ ...td, textAlign: 'center', color: '#374151', padding: '36px 16px' }}>
                           {search ? `Nincs találat: "${search}"` : 'Nincs madárfajta feltöltve'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>)}
+
+          {/* ══ EXPEDITIONS (EXPEDÍCIÓS VÁROSOK) ═══════════════════════════ */}
+          {tab === 'expeditions' && (<>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 18 }}>
+              <StatCard
+                title="Aktív célvárosok"
+                value={cities.filter(c => c.isActive !== false).length}
+                Icon={I.Compass}
+                color={C.purple}
+                sub={`${cities.length} város elérhető`}
+              />
+              <StatCard
+                title="Legnagyobb szorzó"
+                value={cities.length > 0 ? `${Math.max(...cities.map(c => c.rewardMultiplier || 1.0), 1.0).toFixed(1)}x` : '1.0x'}
+                Icon={I.Chart}
+                color={C.yellow}
+                sub="Kiemelt expedíciós zsákmány"
+              />
+              <StatCard
+                title="Gyűjthető bélyegek"
+                value={`${cities.reduce((acc, c) => acc + (c.stamps?.length || 0), 0)} db`}
+                Icon={I.Stamp}
+                color={C.blue}
+                sub="1 db sorsolva küldetésenként"
+              />
+              <StatCard
+                title="Max kalitka esély"
+                value={cities.length > 0 ? `${Math.max(...cities.map(c => c.cageDropChance || 0), 0)}%` : '0%'}
+                Icon={I.Gift}
+                color={C.green}
+                sub="Dúc kalitka bővítés találása"
+              />
+            </div>
+
+            <div style={{ background: 'rgba(15,21,36,0.8)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden' }}>
+              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8' }}>
+                  🌍 Expedíciós Célvárosok & Bélyegek ({cities.length})
+                </span>
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  A játékosok valós koordináták alapján kapnak aranyat, magot, XP-t és bélyeget
+                </span>
+              </div>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' as const, fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      {['Város & Ország', 'Koordináták', 'Min. Szint', 'Jutalomszorzó', 'Kalitka Esély', 'Megszerezhető Bélyegek', 'Állapot', 'Műveletek'].map(h => <th key={h} style={th}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cities
+                      .filter(c => !search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.country?.toLowerCase().includes(search.toLowerCase()))
+                      .map((c: any) => (
+                        <tr key={c._id || c.cityId}>
+                          <td style={td}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{
+                                width: 34, height: 34, borderRadius: 9,
+                                background: 'rgba(99,102,241,0.15)',
+                                border: '1px solid rgba(99,102,241,0.3)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 16,
+                              }}>
+                                {c.icon === 'castle' ? '🏰' : c.icon === 'oriental' ? '🕌' : c.icon === 'metropolis' ? '🗼' : '🏛️'}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#f1f5f9' }}>{c.name}</div>
+                                <div style={{ fontSize: 11, color: '#64748b' }}>{c.country}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={td}>
+                            <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#94a3b8' }}>
+                              {Number(c.lat).toFixed(4)}, {Number(c.lng).toFixed(4)}
+                            </span>
+                          </td>
+                          <td style={td}>
+                            <span style={{
+                              display: 'inline-block', padding: '2px 8px', borderRadius: 6,
+                              background: 'rgba(99,102,241,0.15)', color: '#818cf8', fontWeight: 700, fontSize: 11,
+                            }}>
+                              Szint {c.minLevel || 1}+
+                            </span>
+                          </td>
+                          <td style={td}>
+                            <span style={{
+                              display: 'inline-block', padding: '3px 8px', borderRadius: 6,
+                              background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.35)',
+                              color: '#fbbf24', fontWeight: 800, fontSize: 12,
+                            }}>
+                              {(c.rewardMultiplier || 1.0).toFixed(1)}x
+                            </span>
+                          </td>
+                          <td style={td}>
+                            <span style={{
+                              display: 'inline-block', padding: '3px 8px', borderRadius: 6,
+                              background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)',
+                              color: '#34d399', fontWeight: 700, fontSize: 11,
+                            }}>
+                              🎁 {c.cageDropChance || 0}%
+                            </span>
+                          </td>
+                          <td style={{ ...td, maxWidth: 280 }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                              {Array.isArray(c.stamps) && c.stamps.length > 0 ? (
+                                c.stamps.map((st: any, idx: number) => (
+                                  <span
+                                    key={st.id || idx}
+                                    title={st.name}
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                                      padding: '2px 6px', borderRadius: 5,
+                                      background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.25)',
+                                      color: '#38bdf8', fontSize: 10, fontWeight: 600,
+                                    }}
+                                  >
+                                    📮 {st.code} ({st.name})
+                                  </span>
+                                ))
+                              ) : (
+                                <span style={{ fontSize: 11, color: '#475569', fontStyle: 'italic' }}>Nincs bélyeg</span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={td}>
+                            <span style={{
+                              display: 'inline-block', padding: '3px 8px', borderRadius: 6,
+                              background: c.isActive !== false ? 'rgba(52,211,153,0.15)' : 'rgba(148,163,184,0.15)',
+                              color: c.isActive !== false ? '#34d399' : '#94a3b8',
+                              fontWeight: 700, fontSize: 11,
+                            }}>
+                              {c.isActive !== false ? 'Aktív' : 'Inaktív'}
+                            </span>
+                          </td>
+                          <td style={td}>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                style={btn('ghost')}
+                                onClick={() => openEditCity(c)}
+                                title="Város és bélyegek szerkesztése"
+                              >
+                                <I.Edit /> Szerkeszt
+                              </button>
+                              <button
+                                style={btn('danger')}
+                                onClick={() => deleteCity(c._id, c.name)}
+                                title="Város törlése"
+                              >
+                                <I.Trash />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    {cities.length === 0 && (
+                      <tr>
+                        <td colSpan={8} style={{ ...td, textAlign: 'center', color: '#64748b', padding: '36px 16px' }}>
+                          Nincsenek expedíciós városok. Kattints a „+ Új Város" vagy „Alapértelmezett Városok" gombra!
                         </td>
                       </tr>
                     )}
@@ -1928,6 +2258,316 @@ export default function AdminDashboard() {
                   style={{ ...btn('primary'), padding: '8px 18px', fontWeight: 700 }}
                 >
                   {wheelSaving ? 'Mentés...' : 'Nyeremény mentése'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ══ EXPEDITION CITY ADD / EDIT MODAL ══════════════════════ */}
+      {cityModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
+        }}>
+          <div style={{
+            background: '#0e1320', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16,
+            width: '100%', maxWidth: 580, maxHeight: '90vh', overflowY: 'auto',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+          }}>
+            <div style={{
+              padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#f1f5f9' }}>
+                {cityModal === 'add' ? '🌍 Új Expedíciós Város Létrehozása' : `🌍 Város Szerkesztése: ${cityForm.name}`}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setCityModal(null)}
+                style={{ ...btn('ghost'), padding: '4px 8px', fontSize: 16 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={saveCity} style={{ padding: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Város Neve *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={cityForm.name}
+                    onChange={e => setCityForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="pl. Róma"
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Ország *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={cityForm.country}
+                    onChange={e => setCityForm(prev => ({ ...prev, country: e.target.value }))}
+                    placeholder="pl. Olaszország"
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Szélességi fok (Latitude) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    required
+                    value={cityForm.lat}
+                    onChange={e => setCityForm(prev => ({ ...prev, lat: parseFloat(e.target.value) || 0 }))}
+                    placeholder="41.9028"
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Hosszúsági fok (Longitude) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    required
+                    value={cityForm.lng}
+                    onChange={e => setCityForm(prev => ({ ...prev, lng: parseFloat(e.target.value) || 0 }))}
+                    placeholder="12.4964"
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Hangulatos Leírás
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={cityForm.description}
+                    onChange={e => setCityForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Rövid hangulatos leírás a városról az expedíciós kártyán..."
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Jutalomszorzó (Multiplier)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    max="10"
+                    value={cityForm.rewardMultiplier}
+                    onChange={e => setCityForm(prev => ({ ...prev, rewardMultiplier: parseFloat(e.target.value) || 1.0 }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#fbbf24', fontWeight: 700, fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                  <span style={{ fontSize: 10, color: '#64748b' }}>Pl. 1.5x = +50% arany és XP</span>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Kalitka (Dúcbővítés) Esély %
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={cityForm.cageDropChance}
+                    onChange={e => setCityForm(prev => ({ ...prev, cageDropChance: parseInt(e.target.value, 10) || 0 }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#34d399', fontWeight: 700, fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                  <span style={{ fontSize: 10, color: '#64748b' }}>0 - 100% esély kalitka találására</span>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Szükséges Dúcmester Szint
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={cityForm.minLevel}
+                    onChange={e => setCityForm(prev => ({ ...prev, minLevel: parseInt(e.target.value, 10) || 1 }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#818cf8', fontWeight: 700, fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 5 }}>
+                    Ikon / Téma
+                  </label>
+                  <select
+                    value={cityForm.icon}
+                    onChange={e => setCityForm(prev => ({ ...prev, icon: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px', background: '#161d30',
+                      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+                      color: '#f1f5f9', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  >
+                    <option value="monument">🏛️ Emlékmű / Dóm</option>
+                    <option value="castle">🏰 Várkastély</option>
+                    <option value="metropolis">🗼 Világváros / Torony</option>
+                    <option value="oriental">🕌 Keleti Palota</option>
+                    <option value="coast">🌊 Tengerparti Kikötő</option>
+                    <option value="mountain">🏔️ Hegyvidék</option>
+                  </select>
+                </div>
+
+                {/* STAMPS SECTION */}
+                <div style={{
+                  gridColumn: 'span 2', background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 14,
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <I.Stamp /> Megszerezhető Bélyegek ebben a városban ({cityForm.stamps.length} db)
+                  </div>
+                  <p style={{ margin: '0 0 10px', fontSize: 11, color: '#64748b' }}>
+                    Több bélyeg is beállítható. A madár minden sikeres expedíció után 1 db-ot sorsol és hoz haza a játékosnak!
+                  </p>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                    {cityForm.stamps.map((st, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px',
+                          background: 'rgba(56,189,248,0.14)', border: '1px solid rgba(56,189,248,0.3)',
+                          borderRadius: 8, fontSize: 12, color: '#f1f5f9',
+                        }}
+                      >
+                        <span style={{ fontWeight: 800, color: '#38bdf8' }}>{st.code}</span>
+                        <span>{st.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeStampFromForm(idx)}
+                          style={{
+                            background: 'transparent', border: 'none', color: '#f87171',
+                            cursor: 'pointer', padding: 0, fontWeight: 800, fontSize: 14,
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    {cityForm.stamps.length === 0 && (
+                      <span style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>
+                        Még nincs bélyeg felvéve. Adj hozzá legalább egyet!
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="text"
+                      placeholder="Kód (pl. IT-ROM03)"
+                      value={stampInput.code}
+                      onChange={e => setStampInput(prev => ({ ...prev, code: e.target.value }))}
+                      style={{
+                        width: 140, padding: '7px 10px', background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7,
+                        color: '#f1f5f9', fontSize: 12, outline: 'none',
+                      }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Bélyeg Neve (pl. Trevi-kút Bélyeg)"
+                      value={stampInput.name}
+                      onChange={e => setStampInput(prev => ({ ...prev, name: e.target.value }))}
+                      style={{
+                        flex: 1, padding: '7px 10px', background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7,
+                        color: '#f1f5f9', fontSize: 12, outline: 'none',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={addStampToForm}
+                      style={{ ...btn('primary'), padding: '7px 14px', fontSize: 12, fontWeight: 700 }}
+                    >
+                      + Hozzáadás
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#cbd5e1' }}>
+                    <input
+                      type="checkbox"
+                      checked={cityForm.isActive}
+                      onChange={e => setCityForm(prev => ({ ...prev, isActive: e.target.checked }))}
+                    />
+                    Aktív expedíciós célváros a játékosok számára
+                  </label>
+                </div>
+              </div>
+
+              <div style={{
+                marginTop: 20, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)',
+                display: 'flex', justifyContent: 'flex-end', gap: 10,
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setCityModal(null)}
+                  style={{ ...btn('ghost'), padding: '8px 14px' }}
+                >
+                  Mégse
+                </button>
+                <button
+                  type="submit"
+                  disabled={citySaving}
+                  style={{ ...btn('primary'), padding: '8px 18px', fontWeight: 700 }}
+                >
+                  {citySaving ? 'Mentés...' : 'Város mentése'}
                 </button>
               </div>
             </form>
