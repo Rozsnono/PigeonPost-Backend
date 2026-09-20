@@ -4,6 +4,8 @@ import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
 import { verifyAuth } from '@/lib/auth';
 
+import { simulateLoftTimeDelta } from '@/lib/loftSimulation';
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -22,6 +24,8 @@ export async function GET(req: NextRequest) {
     }
 
     await connectToDatabase();
+    await simulateLoftTimeDelta(auth.userId);
+
     const user = await User.findById(auth.userId).select('inventory feederSeeds');
     if (!user) {
       return NextResponse.json({ error: 'Felhasználó nem található!' }, { status: 404, headers: CORS_HEADERS });
@@ -31,11 +35,16 @@ export async function GET(req: NextRequest) {
       .select('name species level fatigue satiety speedKmH')
       .lean();
 
+    const strayPigeons = await Pigeon.find({ ownerId: auth.userId, status: 'stray' })
+      .select('name species level fatigue satiety speedKmH straySince')
+      .lean();
+
     return NextResponse.json(
       {
         feederSeeds: user.feederSeeds || 0,
         inventorySeeds: user.inventory?.seeds || 0,
         idlePigeons,
+        strayPigeons,
       },
       { headers: CORS_HEADERS }
     );
@@ -59,7 +68,49 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { action = 'fill_and_feed', amount = 10 } = body;
+    const { action = 'fill_and_feed', amount = 10, pigeonId } = body;
+
+    // Action 0: Retrieve stray bird using 25 seeds
+    if (action === 'retrieve_stray') {
+      if (!pigeonId) {
+        return NextResponse.json({ error: 'Madár azonosító szükséges!' }, { status: 400, headers: CORS_HEADERS });
+      }
+
+      const strayPigeon = await Pigeon.findOne({ _id: pigeonId, ownerId: auth.userId, status: 'stray' });
+      if (!strayPigeon) {
+        return NextResponse.json({ error: 'A keresett elszökött madár nem található!' }, { status: 404, headers: CORS_HEADERS });
+      }
+
+      const RETRIEVE_COST = 25;
+      const currentSeeds = user.inventory?.seeds || 0;
+      if (currentSeeds < RETRIEVE_COST) {
+        return NextResponse.json(
+          { error: `Nincs elég magod a madár visszacsalogatásához! Szükséges: ${RETRIEVE_COST} mag, elérhető: ${currentSeeds}.` },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+
+      user.inventory.seeds = Math.max(0, currentSeeds - RETRIEVE_COST);
+      await user.save();
+
+      strayPigeon.status = 'idle';
+      strayPigeon.satiety = 60;
+      strayPigeon.fatigue = 20;
+      strayPigeon.straySince = null as any;
+      strayPigeon.starvingSince = null as any;
+      strayPigeon.lastLoftTickAt = new Date();
+      await strayPigeon.save();
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: `${strayPigeon.name} megérezte a friss magok illatát és boldogan visszatért a dúcba!`,
+          pigeon: strayPigeon,
+          inventorySeeds: user.inventory.seeds,
+        },
+        { headers: CORS_HEADERS }
+      );
+    }
 
     const currentInventorySeeds = user.inventory?.seeds || 0;
     let currentFeederSeeds = user.feederSeeds || 0;

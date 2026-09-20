@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import Pigeon from '@/models/Pigeon';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
+import { simulateLoftTimeDelta } from '@/lib/loftSimulation';
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
@@ -14,6 +15,7 @@ export async function GET(req: NextRequest) {
 
   try {
     await connectToDatabase();
+    await simulateLoftTimeDelta(auth.userId);
     let pigeons = await Pigeon.find({ ownerId: auth.userId }).lean();
     if (pigeons.length === 0) {
       const defaultPigeon = await Pigeon.create({
