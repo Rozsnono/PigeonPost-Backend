@@ -39,6 +39,9 @@ export interface IMessage extends Document {
   isOpenSkies?: boolean;
   attachedStampId?: string;
   deliveryGoldReward?: number;
+  hasTailwind?: boolean;
+  escortPigeonId?: mongoose.Types.ObjectId;
+  escortPigeonName?: string;
 
   createdAt: Date;
   updatedAt: Date;
@@ -53,6 +56,9 @@ const MessageSchema: Schema = new Schema(
     isFlock: { type: Boolean, default: false },
     flockSize: { type: Number, default: 1 },
     content: { type: String, required: true, maxlength: 15000 },
+    hasTailwind: { type: Boolean, default: false },
+    escortPigeonId: { type: Schema.Types.ObjectId, ref: 'Pigeon', default: null },
+    escortPigeonName: { type: String, default: null },
     status: {
       type: String,
       enum: ['flying', 'delivered', 'waiting_for_pickup', 'expired_lost', 'returned_to_sender'],

@@ -81,6 +81,7 @@ export interface IUser extends Document {
   claimedMilestones?: string[];
   totalKmExplored?: number;
   feederSeeds?: number; // Seeds currently in the loft's trough
+  loftBeaconUntil?: Date; // Loft beacon fire expiration date
 
   isDeleted: boolean;
   deletedAt?: Date;
@@ -101,6 +102,7 @@ const UserSchema: Schema = new Schema(
       cages: { type: Number, default: 1 },
     },
     feederSeeds: { type: Number, default: 0, min: 0 },
+    loftBeaconUntil: { type: Date, default: null },
     stats: {
       sentCount: { type: Number, default: 0 },
       receivedCount: { type: Number, default: 0 },

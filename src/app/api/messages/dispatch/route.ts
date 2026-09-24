@@ -137,7 +137,13 @@ export async function POST(req: NextRequest) {
     
     // Flock average speed
     const avgSpeedKmH = Math.round(pigeons.reduce((sum, p) => sum + (p.speedKmH || 80), 0) / pigeons.length);
-    const flightDurationMinutes = Math.max(1, Math.round((distanceKm / avgSpeedKmH) * 60));
+    let flightDurationMinutes = Math.max(1, Math.round((distanceKm / avgSpeedKmH) * 60));
+
+    // If recipient has an active Loft Beacon fire, flight is 1.5x faster (+50% speed)
+    const isRecipientBeaconActive = recipient?.loftBeaconUntil && new Date(recipient.loftBeaconUntil).getTime() > Date.now();
+    if (isRecipientBeaconActive) {
+      flightDurationMinutes = Math.max(1, Math.round(flightDurationMinutes / 1.5));
+    }
 
     // Survival and lost chances: flock provides significant safety synergy
     const highestLevel = Math.max(...pigeons.map(p => p.level || 1));
