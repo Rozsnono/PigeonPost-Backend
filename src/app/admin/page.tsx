@@ -28,6 +28,7 @@ const I = {
   Upload: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
   Compass: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>,
   Stamp: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="12" cy="12" r="4"/><path d="m16 8 2-2"/><path d="m8 16-2 2"/></svg>,
+  Key: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 2-2 2m-1.5 1.5L16 7l-2-2-4 4-2-2L2 13a6 6 0 1 0 8.5 8.5L21 11.5V7h-4.5z"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>,
 };
 
 type Tab = 'overview' | 'users' | 'pigeons' | 'species' | 'expeditions' | 'wheel' | 'messages' | 'activity';
@@ -606,6 +607,26 @@ export default function AdminDashboard() {
     if (r.ok) { toast$(`✓ ${uname} törölve`); fetchUsers(); } else toast$('✗ Sikertelen');
   };
 
+  const changeUserPassword = async (uid: string, uname: string) => {
+    const newPass = prompt(`Új jelszó megadása „${uname}" felhasználó számára (legalább 6 karakter):`);
+    if (!newPass) return;
+    if (newPass.length < 6) {
+      toast$('✗ A jelszónak legalább 6 karakternek kell lennie!');
+      return;
+    }
+    const r = await fetch('/api/admin/users/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...hdr() },
+      body: JSON.stringify({ userId: uid, newPassword: newPass }),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      toast$(`✓ ${uname} jelszava sikeresen megváltoztatva!`);
+    } else {
+      toast$(`✗ ${d.error || 'Sikertelen jelszómódosítás'}`);
+    }
+  };
+
   const recallPigeon = async (pid: string, name: string) => {
     if (!confirm(`Hazahívod „${name}" galambot azonnal?`)) return;
     const r = await fetch('/api/admin/pigeons/recall', { method: 'POST', headers: { 'Content-Type': 'application/json', ...hdr() }, body: JSON.stringify({ pigeonId: pid }) });
@@ -1016,6 +1037,7 @@ export default function AdminDashboard() {
                             <button style={btn('success')} onClick={() => giveItem('/api/admin/users/seeds', u._id, u.username, 'mag')}><I.Seed />Mag</button>
                             <button style={btn('warning')} onClick={() => giveItem('/api/admin/users/cages', u._id, u.username, 'kalitka')}><I.Gift />Kalitka</button>
                             <button style={btnGold} onClick={() => giveItem('/api/admin/users/gold', u._id, u.username, 'arany')}><I.Gold />Arany</button>
+                            <button style={btn('primary')} onClick={() => changeUserPassword(u._id, u.username)} title="Jelszó módosítása"><I.Key />Jelszó</button>
                             <button style={btn('ghost')} onClick={() => banUser(u._id, u.username)}><I.Ban /></button>
                             <button style={btn('danger')} onClick={() => deleteUser(u._id, u.username)}><I.Trash /></button>
                           </div>

@@ -9,13 +9,13 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = verifyAuth(req);
   if (!auth) return unauthorizedResponse();
 
   try {
     await connectToDatabase();
-    const messageId = params.id;
+    const { id: messageId } = await params;
     const body = await req.json().catch(() => ({}));
     const { type, pigeonId } = body;
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import bcrypt from 'bcrypt';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import Message from '@/models/Message';
@@ -149,6 +150,25 @@ export async function PATCH(req: NextRequest) {
 
     if (body.pinColor && typeof body.pinColor === 'string') {
       updateFields.pinColor = body.pinColor;
+    }
+
+    if (body.newPassword) {
+      if (typeof body.newPassword !== 'string' || body.newPassword.length < 6) {
+        return NextResponse.json({ error: 'Az új jelszónak legalább 6 karakternek kell lennie!' }, { status: 400, headers: CORS_HEADERS });
+      }
+      const existingUser = await User.findById(auth.userId);
+      if (!existingUser) {
+        return NextResponse.json({ error: 'Felhasználó nem található!' }, { status: 404, headers: CORS_HEADERS });
+      }
+      if (!body.currentPassword) {
+        return NextResponse.json({ error: 'A jelenlegi jelszó megadása kötelező!' }, { status: 400, headers: CORS_HEADERS });
+      }
+      const isMatch = await bcrypt.compare(body.currentPassword, existingUser.passwordHash);
+      if (!isMatch) {
+        return NextResponse.json({ error: 'A jelenlegi jelszó hibás!' }, { status: 400, headers: CORS_HEADERS });
+      }
+      updateFields.passwordHash = await bcrypt.hash(body.newPassword, 10);
+      await createLog('info', 'Auth', `Jelszómódosítás (profile PATCH): ${existingUser.username}`, { userId: existingUser._id });
     }
 
     const updatedUser = await User.findByIdAndUpdate(
