@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminRequest } from '@/lib/adminAuth';
 import connectToDatabase from '@/lib/db';
 import Pigeon from '@/models/Pigeon';
 import Message from '@/models/Message';
@@ -7,8 +8,7 @@ import { createLog } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
   try {
-    const adminSecret = process.env.ADMIN_SECRET;
-    if (req.headers.get('authorization') !== `Bearer ${adminSecret}`) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -28,8 +28,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const adminSecret = process.env.ADMIN_SECRET;
-    if (req.headers.get('authorization') !== `Bearer ${adminSecret}`) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -90,6 +89,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('POST /api/admin/flights accelerate error:', error);
-    return NextResponse.json({ error: error.message || 'Server Error' }, { status: 500 });
+    return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
 }

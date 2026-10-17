@@ -4,14 +4,11 @@ import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
 import Message from '@/models/Message';
 import Log from '@/models/Log';
+import { isAdminRequest } from '@/lib/adminAuth';
 
 export async function GET(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization');
-    const adminSecret = process.env.ADMIN_SECRET;
-
-    // Check authorization (Bearer token format: "Bearer <ADMIN_SECRET>")
-    if (!adminSecret || authHeader !== `Bearer ${adminSecret}`) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

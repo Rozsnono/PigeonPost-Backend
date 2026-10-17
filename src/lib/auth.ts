@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+  // Natív mobilalkalmazásnak nem kell CORS; webes buildhez szűkíthető a CORS_ALLOW_ORIGIN env-vel.
+  'Access-Control-Allow-Origin': process.env.CORS_ALLOW_ORIGIN || '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
@@ -11,6 +12,18 @@ export { CORS_HEADERS };
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
+/**
+ * A JWT aláíró titok kizárólag környezeti változóból jön. Ha hiányzik,
+ * kivételt dobunk (nincs bedrótozott fallback, mert az hamisítható tokent jelentene).
+ */
+export function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET környezeti változó nincs beállítva.');
+  }
+  return secret;
 }
 
 export interface JWTPayload {
@@ -28,10 +41,14 @@ export function verifyAuth(req: NextRequest): JWTPayload | null {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
     const token = authHeader.substring(7);
-    const jwtSecret = process.env.JWT_SECRET || 'fallback_secret_for_development';
-    const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
+    const decoded = jwt.verify(token, getJwtSecret()) as JWTPayload;
     return decoded;
-  } catch {
+  } catch (err) {
+    // Lejárt / érvénytelen token: a kliens refresh-sel vagy újra belépéssel kezeli.
+    // Hiányzó JWT_SECRET konfigurációs hiba: ezt naplózzuk.
+    if (err instanceof Error && err.message.includes('JWT_SECRET')) {
+      console.error('[auth]', err.message);
+    }
     return null;
   }
 }

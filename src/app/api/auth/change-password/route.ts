@@ -4,11 +4,13 @@ import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 import { createLog } from '@/lib/logger';
+import { revokeAllRefreshTokens, issueRefreshToken, signAccessToken } from '@/lib/tokens';
+import { rateLimit } from '@/lib/rateLimit';
 import { z } from 'zod';
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Kérjük, add meg a jelenlegi jelszavadat!'),
-  newPassword: z.string().min(6, 'Az új jelszónak legalább 6 karakter hosszúnak kell lennie!'),
+  newPassword: z.string().max(200).min(6, 'Az új jelszónak legalább 6 karakter hosszúnak kell lennie!'),
 });
 
 export async function OPTIONS() {
@@ -18,6 +20,10 @@ export async function OPTIONS() {
 export async function POST(req: NextRequest) {
   const auth = verifyAuth(req);
   if (!auth) return unauthorizedResponse();
+
+  if (!rateLimit(`chpw:${auth.userId}`, 10, 15 * 60 * 1000)) {
+    return NextResponse.json({ error: 'Túl sok kísérlet. Próbáld újra később.' }, { status: 429, headers: CORS_HEADERS });
+  }
 
   try {
     await connectToDatabase();
@@ -45,11 +51,16 @@ export async function POST(req: NextRequest) {
     const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
     user.passwordHash = newPasswordHash;
     await user.save();
+    // Jelszócsere után az összes korábbi munkamenet (refresh token) érvénytelen
+    await revokeAllRefreshTokens(String(user._id));
+    // Az aktuális eszköz új munkamenetet kap, hogy ne lépjen ki
+    const token = signAccessToken(user);
+    const refreshToken = await issueRefreshToken(String(user._id));
 
     await createLog('info', 'Auth', `Jelszómódosítás: ${user.username} (${user.email})`, { userId: user._id });
 
     return NextResponse.json(
-      { success: true, message: 'A jelszavad sikeresen megváltoztatva!' },
+      { success: true, message: 'A jelszavad sikeresen megváltoztatva!', token, refreshToken },
       { status: 200, headers: CORS_HEADERS }
     );
   } catch (error) {

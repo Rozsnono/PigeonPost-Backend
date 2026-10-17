@@ -5,12 +5,14 @@ import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
 import { z } from 'zod';
 
-import { verifyAuth, CORS_HEADERS } from '@/lib/auth';
+import { CORS_HEADERS } from '@/lib/auth';
+import { getClientIp, rateLimit } from '@/lib/rateLimit';
+import { escapeRegex } from '@/lib/escapeRegex';
 
 const registerSchema = z.object({
-  username: z.string().min(3).max(30),
-  email: z.string().email(),
-  password: z.string().min(6)
+  username: z.string().trim().min(3).max(30),
+  email: z.string().trim().email().max(100),
+  password: z.string().min(6).max(200)
 });
 
 export async function OPTIONS() {
@@ -19,9 +21,13 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
+    // Spam védelem: IP-nként 10 regisztráció / óra
+    if (!rateLimit(`register:${getClientIp(req)}`, 10, 60 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Túl sok regisztrációs kísérlet. Próbáld újra később.' }, { status: 429, headers: CORS_HEADERS });
+    }
     await connectToDatabase();
     
-    const body = await req.json();
+    const body = await req.json().catch(() => null);
     const validation = registerSchema.safeParse(body);
 
     if (!validation.success) {
@@ -31,7 +37,12 @@ export async function POST(req: NextRequest) {
     const { username, email, password } = validation.data;
 
     // Check if user already exists
-    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+    const existingUser = await User.findOne({
+      $or: [
+        { email: new RegExp(`^${escapeRegex(email)}$`, 'i') },
+        { username: new RegExp(`^${escapeRegex(username)}$`, 'i') },
+      ],
+    });
     if (existingUser) {
       return NextResponse.json({ error: 'User with this email or username already exists' }, { status: 409, headers: CORS_HEADERS });
     }

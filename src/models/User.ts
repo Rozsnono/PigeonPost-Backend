@@ -83,6 +83,9 @@ export interface IUser extends Document {
   feederSeeds?: number; // Seeds currently in the loft's trough
   loftBeaconUntil?: Date; // Loft beacon fire expiration date
 
+  // Hosszú életű munkamenet: a refresh tokenek SHA-256 hash-e (a nyers token csak a kliensnél van)
+  refreshTokens?: { hash: string; expiresAt: Date; createdAt: Date }[];
+
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -184,6 +187,19 @@ const UserSchema: Schema = new Schema(
     },
     claimedMilestones: { type: [String], default: [] },
     totalKmExplored: { type: Number, default: 0 },
+
+    refreshTokens: {
+      type: [
+        {
+          _id: false,
+          hash: { type: String, required: true },
+          expiresAt: { type: Date, required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+      select: false,
+    },
 
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },

@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import { z } from 'zod';
 import { createLog } from '@/lib/logger';
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
+import { CORS_HEADERS } from '@/lib/auth';
+import { escapeRegex } from '@/lib/escapeRegex';
+import { getClientIp, rateLimit } from '@/lib/rateLimit';
+import { signAccessToken, issueRefreshToken } from '@/lib/tokens';
 
 const loginSchema = z.object({
-  usernameOrEmail: z.string().min(3),
-  password: z.string().min(6),
+  usernameOrEmail: z.string().min(3).max(100),
+  password: z.string().min(6).max(200),
 });
 
 // Handle CORS preflight requests from mobile
@@ -23,19 +20,20 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  console.log('=== [login/route] POST called ===');
-  console.log('URL:', req.url);
   try {
-    console.log('[login/route] Connecting to database...');
+    // Brute force védelem: IP-nként 20 próbálkozás / 15 perc
+    if (!rateLimit(`login:${getClientIp(req)}`, 20, 15 * 60 * 1000)) {
+      return NextResponse.json(
+        { error: 'Túl sok bejelentkezési kísérlet. Próbáld újra később.' },
+        { status: 429, headers: CORS_HEADERS }
+      );
+    }
+
     await connectToDatabase();
-    console.log('[login/route] Database connected.');
 
-    const body = await req.json();
-    console.log('[login/route] Request body:', JSON.stringify(body));
-
+    const body = await req.json().catch(() => null);
     const validation = loginSchema.safeParse(body);
     if (!validation.success) {
-      console.log('[login/route] Validation failed:', JSON.stringify(validation.error.issues));
       return NextResponse.json(
         { error: 'Invalid data', details: validation.error.issues },
         { status: 400, headers: CORS_HEADERS }
@@ -43,73 +41,40 @@ export async function POST(req: NextRequest) {
     }
 
     const { usernameOrEmail, password } = validation.data;
-    console.log('[login/route] Looking up user:', usernameOrEmail);
 
-    // Find user by username OR email (case-insensitive)
-    const searchRegex = new RegExp(`^${usernameOrEmail}$`, 'i');
-    let user;
-    try {
-      user = await User.findOne({
-        $or: [{ email: searchRegex }, { username: searchRegex }],
-      });
-    } catch (dbErr) {
-      console.error('[login/route] DB findOne error:', dbErr);
-      return NextResponse.json(
-        { error: 'Database error' },
-        { status: 500, headers: CORS_HEADERS }
-      );
-    }
+    // Find user by username OR email (case-insensitive, a bemenet escape-elve)
+    const searchRegex = new RegExp(`^${escapeRegex(usernameOrEmail.trim())}$`, 'i');
+    const user = await User.findOne({
+      $or: [{ email: searchRegex }, { username: searchRegex }],
+    });
 
-    if (!user) {
-      console.log(`[login/route] User NOT FOUND for: "${usernameOrEmail}"`);
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 401, headers: CORS_HEADERS }
-      );
-    }
+    // Egységes hibaüzenet: nem derül ki, hogy a felhasználó létezik-e
+    const invalid = () =>
+      NextResponse.json({ error: 'Invalid credentials' }, { status: 401, headers: CORS_HEADERS });
 
-    console.log('[login/route] User found:', user.username, '| passwordHash exists:', !!user.passwordHash);
+    if (!user || user.isDeleted) return invalid();
 
-    // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    console.log('[login/route] Password valid:', isPasswordValid);
-
     if (!isPasswordValid) {
-      console.log(`[login/route] Incorrect password for user: ${user.username}`);
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 401, headers: CORS_HEADERS }
-      );
+      await createLog('warn', 'Auth', `Sikertelen bejelentkezés: ${user.username}`, { userId: user._id });
+      return invalid();
     }
 
-    // Check if user is banned
-    if (user.status === 'banned') {
-      return NextResponse.json(
-        { error: 'Account is banned' },
-        { status: 403, headers: CORS_HEADERS }
-      );
+    // Check if user is banned (a séma jelenleg nem tartalmaz status mezőt; előre-kompatibilis ellenőrzés)
+    if ((user as any).status === 'banned') {
+      return NextResponse.json({ error: 'Account is banned' }, { status: 403, headers: CORS_HEADERS });
     }
 
-    const jwtSecret = process.env.JWT_SECRET || 'fallback_secret_for_development';
+    const token = signAccessToken(user);
+    const refreshToken = await issueRefreshToken(String(user._id));
 
-    // Generate token
-    const token = jwt.sign(
-      {
-        userId: user._id,
-        username: user.username,
-        role: user.role,
-      },
-      jwtSecret,
-      { expiresIn: '7d' }
-    );
-
-    console.log('[login/route] Login successful for:', user.username);
     await createLog('info', 'Auth', `Sikeres bejelentkezés: ${user.username}`, { userId: user._id });
 
     return NextResponse.json(
       {
         message: 'Login successful',
         token,
+        refreshToken,
         user: {
           id: user._id,
           username: user.username,
@@ -121,9 +86,6 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     console.error('[login/route] Unhandled error:', error);
-    return NextResponse.json(
-      { error: 'Internal Server Error' },
-      { status: 500, headers: CORS_HEADERS }
-    );
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: CORS_HEADERS });
   }
 }

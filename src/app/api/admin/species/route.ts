@@ -4,11 +4,10 @@ import User from '@/models/User';
 import BirdSpecies from '@/models/BirdSpecies';
 import { ensureDefaultSpecies } from '@/app/api/aviary/route';
 import { createLog } from '@/lib/logger';
+import { isAdminRequest } from '@/lib/adminAuth';
 
 function checkAdminAuth(req: NextRequest) {
-  const adminSecret = process.env.ADMIN_SECRET;
-  const authHeader = req.headers.get('authorization');
-  return authHeader === `Bearer ${adminSecret}`;
+  return isAdminRequest(req);
 }
 
 // GET /api/admin/species - list all species with stats
@@ -111,7 +110,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(newSpecies, { status: 201 });
   } catch (error: any) {
     console.error('POST /api/admin/species error:', error);
-    return NextResponse.json({ error: error.message || 'Hiba történt a mentés során' }, { status: 500 });
+    return NextResponse.json({ error: 'Hiba történt a mentés során' }, { status: 500 });
   }
 }
 
@@ -150,7 +149,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(spec);
   } catch (error: any) {
     console.error('PUT /api/admin/species error:', error);
-    return NextResponse.json({ error: error.message || 'Hiba a frissítés során' }, { status: 500 });
+    return NextResponse.json({ error: 'Hiba a frissítés során' }, { status: 500 });
   }
 }
 
@@ -195,6 +194,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true, isActive: spec.isActive });
   } catch (error: any) {
     console.error('DELETE /api/admin/species error:', error);
-    return NextResponse.json({ error: error.message || 'Hiba a törlés során' }, { status: 500 });
+    return NextResponse.json({ error: 'Hiba a törlés során' }, { status: 500 });
   }
 }

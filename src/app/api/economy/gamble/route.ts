@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withUserLock } from '@/lib/userLock';
+import { claimOnce } from '@/lib/claimOnce';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import WheelSlot from '@/models/WheelSlot';
@@ -74,13 +76,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const auth = verifyAuth(req);
   if (!auth) return unauthorizedResponse();
 
   try {
     await connectToDatabase();
-    const user = await User.findById(auth.userId);
+    let user = await User.findById(auth.userId);
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
 
     const lastGambleAt = user.dailyRewards?.lastGambleAt ? new Date(user.dailyRewards.lastGambleAt) : null;
@@ -99,6 +101,18 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+
+    // Atomi zárolás: párhuzamos kérések (akár másik szerverpéldányon) nem nyerhetnek kétszer
+    if (!(await claimOnce(auth.userId, 'dailyRewards.lastGambleAt', lastGambleAt, now))) {
+      return NextResponse.json(
+        { error: 'A napi pörgetés már felhasználva!' },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
+    // A claim után frissen töltjük be a felhasználót, hogy ne írjunk felül köztes módosítást
+    const freshUser = await User.findById(auth.userId);
+    if (!freshUser) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
+    user = freshUser;
 
     const slots = await getActiveSlots();
 
@@ -183,3 +197,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: CORS_HEADERS });
   }
 }
+
+export const POST = withUserLock(handlePOST);

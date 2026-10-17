@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminRequest } from '@/lib/adminAuth';
 import bcrypt from 'bcrypt';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import { createLog } from '@/lib/logger';
+import { revokeAllRefreshTokens } from '@/lib/tokens';
 
 export async function POST(req: NextRequest) {
   try {
-    const adminSecret = process.env.ADMIN_SECRET;
-    if (req.headers.get('authorization') !== `Bearer ${adminSecret}`) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
     const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
     user.passwordHash = newPasswordHash;
     await user.save();
+    await revokeAllRefreshTokens(String(user._id));
 
     await createLog('warn', 'Admin', `Admin jelszó-visszaállítás a következő felhasználónak: ${user.username} (${user.email})`, { userId });
 

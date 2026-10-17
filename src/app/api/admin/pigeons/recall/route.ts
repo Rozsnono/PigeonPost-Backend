@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminRequest } from '@/lib/adminAuth';
 import connectToDatabase from '@/lib/db';
 import Pigeon from '@/models/Pigeon';
 import Message from '@/models/Message';
@@ -6,8 +7,7 @@ import { createLog } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
   try {
-    const adminSecret = process.env.ADMIN_SECRET;
-    if (req.headers.get('authorization') !== `Bearer ${adminSecret}`) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

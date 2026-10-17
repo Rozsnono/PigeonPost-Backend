@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withUserLock } from '@/lib/userLock';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
@@ -28,7 +29,7 @@ const BIRD_BASE_SPEEDS: Record<string, number> = {
   phoenix_express: 300,
 };
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const auth = verifyAuth(req);
   if (!auth) return unauthorizedResponse();
 
@@ -104,3 +105,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Belső szerver hiba történt.' }, { status: 500, headers: CORS_HEADERS });
   }
 }
+
+export const POST = withUserLock(handlePOST);

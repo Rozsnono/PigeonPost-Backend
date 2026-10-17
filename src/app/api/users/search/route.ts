@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
+import { escapeRegex } from '@/lib/escapeRegex';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 
 export async function OPTIONS() {
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
     const users = await User.find({
-      username: { $regex: q, $options: 'i' },
+      username: { $regex: escapeRegex(q), $options: 'i' },
       _id: { $ne: auth.userId }, // exclude self
       isDeleted: false,
     })

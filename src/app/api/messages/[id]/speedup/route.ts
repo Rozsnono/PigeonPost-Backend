@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withUserLock } from '@/lib/userLock';
 import connectToDatabase from '@/lib/db';
 import Message from '@/models/Message';
 import User from '@/models/User';
@@ -9,7 +10,7 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = verifyAuth(req);
   if (!auth) return unauthorizedResponse();
 
@@ -56,8 +57,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         );
       }
 
-      user.inventory.seeds = Math.max(0, currentSeeds - TAILWIND_COST);
-      await user.save();
+      // Atomi levonás: csak akkor sikerül, ha még van elég mag
+      const spent = await User.findOneAndUpdate(
+        { _id: auth.userId, 'inventory.seeds': { $gte: TAILWIND_COST } },
+        { $inc: { 'inventory.seeds': -TAILWIND_COST } },
+        { new: true }
+      );
+      if (!spent) {
+        return NextResponse.json(
+          { error: 'Nincs elég magod a hátszél idézéséhez!' },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+      user.inventory.seeds = spent.inventory.seeds;
 
       // Cut remaining time by half (min 30 seconds)
       const newRemainingMs = Math.max(30000, Math.floor(remainingMs / 2));
@@ -142,6 +154,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Érvénytelen gyorsítási típus! Használj "tailwind" vagy "escort" opciót.' }, { status: 400, headers: CORS_HEADERS });
   } catch (error: any) {
     console.error('POST /api/messages/[id]/speedup error:', error);
-    return NextResponse.json({ error: error?.message || 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
+    return NextResponse.json({ error: 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
   }
 }
+
+export const POST = withUserLock(handlePOST);

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminRequest } from '@/lib/adminAuth';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import { createLog } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
   try {
-    const adminSecret = process.env.ADMIN_SECRET;
-    if (req.headers.get('authorization') !== `Bearer ${adminSecret}`) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -23,8 +23,7 @@ export async function GET(req: NextRequest) {
 // Delete user (supports soft delete and permanent delete)
 export async function DELETE(req: NextRequest) {
   try {
-    const adminSecret = process.env.ADMIN_SECRET;
-    if (req.headers.get('authorization') !== `Bearer ${adminSecret}`) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

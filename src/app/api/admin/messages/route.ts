@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminRequest } from '@/lib/adminAuth';
 import connectToDatabase from '@/lib/db';
 import Message from '@/models/Message';
 
 export async function GET(req: NextRequest) {
   try {
-    const adminSecret = process.env.ADMIN_SECRET;
-    if (req.headers.get('authorization') !== `Bearer ${adminSecret}`) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

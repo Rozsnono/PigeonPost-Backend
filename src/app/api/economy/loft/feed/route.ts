@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withUserLock } from '@/lib/userLock';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
-import { verifyAuth } from '@/lib/auth';
+import { verifyAuth, CORS_HEADERS } from '@/lib/auth';
 
 import { simulateLoftTimeDelta } from '@/lib/loftSimulation';
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
@@ -54,7 +49,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   try {
     const auth = verifyAuth(req);
     if (!auth?.userId) {
@@ -216,3 +211,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
   }
 }
+
+export const POST = withUserLock(handlePOST);

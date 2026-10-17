@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withUserLock } from '@/lib/userLock';
 import connectToDatabase from '@/lib/db';
 import Message from '@/models/Message';
 import User from '@/models/User';
@@ -47,7 +48,7 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
   return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const auth = verifyAuth(req);
   if (!auth) return unauthorizedResponse();
 
@@ -234,3 +235,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Belső szerver hiba történt a levél küldése közben.' }, { status: 500, headers: CORS_HEADERS });
   }
 }
+
+export const POST = withUserLock(handlePOST);

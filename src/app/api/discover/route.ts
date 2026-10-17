@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
+import { escapeRegex } from '@/lib/escapeRegex';
 import User from '@/models/User';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 
@@ -71,10 +72,10 @@ export async function GET(req: NextRequest) {
 
     if (query) {
       filter.$or = [
-        { username: { $regex: query, $options: 'i' } },
-        { 'location.city': { $regex: query, $options: 'i' } },
-        { bio: { $regex: query, $options: 'i' } },
-        { interests: { $regex: query, $options: 'i' } },
+        { username: { $regex: escapeRegex(String(query)), $options: 'i' } },
+        { 'location.city': { $regex: escapeRegex(String(query)), $options: 'i' } },
+        { bio: { $regex: escapeRegex(String(query)), $options: 'i' } },
+        { interests: { $regex: escapeRegex(String(query)), $options: 'i' } },
       ];
     }
 
@@ -83,11 +84,11 @@ export async function GET(req: NextRequest) {
     }
 
     if (language) {
-      filter['languages.name'] = { $regex: language, $options: 'i' };
+      filter['languages.name'] = { $regex: escapeRegex(String(language)), $options: 'i' };
     }
 
     if (interest) {
-      filter.interests = { $in: [new RegExp(interest, 'i')] };
+      filter.interests = { $in: [new RegExp(escapeRegex(String(interest)), 'i')] };
     }
 
     const usersRaw = await User.find(filter)

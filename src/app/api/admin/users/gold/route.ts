@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminRequest } from '@/lib/adminAuth';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
+import { parseAdminAmount } from '@/lib/adminAmount';
 
 export async function POST(req: NextRequest) {
   try {
-    const adminSecret = process.env.ADMIN_SECRET;
-    if (req.headers.get('authorization') !== `Bearer ${adminSecret}`) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -15,8 +16,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
-    const numAmount = Number(amount);
-    if (isNaN(numAmount)) {
+    const numAmount = parseAdminAmount(amount);
+    if (numAmount === null) {
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
     }
 

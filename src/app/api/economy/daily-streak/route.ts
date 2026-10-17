@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withUserLock } from '@/lib/userLock';
+import { claimOnce } from '@/lib/claimOnce';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
@@ -69,13 +71,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const auth = verifyAuth(req);
   if (!auth) return unauthorizedResponse();
 
   try {
     await connectToDatabase();
-    const user = await User.findById(auth.userId);
+    let user = await User.findById(auth.userId);
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
 
     const now = new Date();
@@ -98,6 +100,14 @@ export async function POST(req: NextRequest) {
     }
 
     const reward = STREAK_REWARDS.find((r) => r.day === currentStreak) || STREAK_REWARDS[0];
+
+    // Atomi zárolás: párhuzamos kérés nem veheti át kétszer a napi bónuszt
+    if (!(await claimOnce(auth.userId, 'dailyRewards.lastDailyClaimAt', lastClaimAt, now))) {
+      return NextResponse.json({ error: 'A mai dúcbónuszt már átvetted! Gyere vissza holnap.' }, { status: 400, headers: CORS_HEADERS });
+    }
+    const freshUser = await User.findById(auth.userId);
+    if (!freshUser) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
+    user = freshUser;
 
     // Apply rewards
     user.gold = (user.gold ?? 0) + reward.gold;
@@ -154,3 +164,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: CORS_HEADERS });
   }
 }
+
+export const POST = withUserLock(handlePOST);

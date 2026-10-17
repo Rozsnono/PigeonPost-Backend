@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withUserLock } from '@/lib/userLock';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
@@ -25,7 +26,7 @@ function calculateHaversineKm(lat1: number, lon1: number, lat2: number, lon2: nu
 }
 
 // POST /api/messages/openskies — Release to the wind (Wandering message)
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const auth = verifyAuth(req);
   if (!auth) return unauthorizedResponse();
 
@@ -145,3 +146,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500, headers: CORS_HEADERS });
   }
 }
+
+export const POST = withUserLock(handlePOST);

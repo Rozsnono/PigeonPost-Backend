@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withUserLock } from '@/lib/userLock';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
+import { escapeRegex } from '@/lib/escapeRegex';
 import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
 import Expedition from '@/models/Expedition';
@@ -143,7 +145,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const auth = verifyAuth(req);
   if (!auth) return unauthorizedResponse();
 
@@ -171,7 +173,7 @@ export async function POST(req: NextRequest) {
         city = await ExpeditionCity.findOne({
           $or: [
             { cityId: targetCityId.toLowerCase() },
-            { name: new RegExp(`^${targetCityId}$`, 'i') },
+            { name: new RegExp(`^${escapeRegex(String(targetCityId))}$`, 'i') },
           ],
         });
       }
@@ -481,8 +483,10 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('POST /api/economy/expeditions error:', error);
     return NextResponse.json(
-      { error: error?.message || 'Belső szerverhiba történt az expedíció során!' },
+      { error: 'Belső szerverhiba történt az expedíció során!' },
       { status: 500, headers: CORS_HEADERS }
     );
   }
 }
+
+export const POST = withUserLock(handlePOST);

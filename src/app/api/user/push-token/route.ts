@@ -2,19 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
+import { getJwtSecret, CORS_HEADERS } from '@/lib/auth';
 
 export async function OPTIONS() {
-  return NextResponse.json({}, {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    }
-  });
+  return NextResponse.json({}, { headers: CORS_HEADERS });
 }
 
 function withCors(response: NextResponse) {
-  response.headers.set('Access-Control-Allow-Origin', '*');
+  response.headers.set('Access-Control-Allow-Origin', CORS_HEADERS['Access-Control-Allow-Origin']);
   return response;
 }
 
@@ -25,7 +20,7 @@ export async function POST(req: NextRequest) {
       return withCors(NextResponse.json({ error: 'Missing token' }, { status: 401 }));
     }
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: string };
+    const decoded = jwt.verify(token, getJwtSecret()) as { userId: string };
 
     const body = await req.json();
     const { pushToken } = body;

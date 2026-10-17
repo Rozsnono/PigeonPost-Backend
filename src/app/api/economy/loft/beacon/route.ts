@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withUserLock } from '@/lib/userLock';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import Message from '@/models/Message';
@@ -35,11 +36,11 @@ export async function GET(req: NextRequest) {
     );
   } catch (error: any) {
     console.error('GET /api/economy/loft/beacon error:', error);
-    return NextResponse.json({ error: error?.message || 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
+    return NextResponse.json({ error: 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const auth = verifyAuth(req);
   if (!auth) return unauthorizedResponse();
 
@@ -98,6 +99,8 @@ export async function POST(req: NextRequest) {
     );
   } catch (error: any) {
     console.error('POST /api/economy/loft/beacon error:', error);
-    return NextResponse.json({ error: error?.message || 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
+    return NextResponse.json({ error: 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
   }
 }
+
+export const POST = withUserLock(handlePOST);
