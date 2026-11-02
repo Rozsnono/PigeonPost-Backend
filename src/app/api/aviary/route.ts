@@ -3,7 +3,7 @@ import { withUserLock } from '@/lib/userLock';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
-import BirdSpecies, { IBirdSpecies } from '@/models/BirdSpecies';
+import BirdSpecies, { type IBirdSpecies } from '@/models/BirdSpecies';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 
 export async function OPTIONS() {
@@ -157,9 +157,9 @@ export async function GET(req: NextRequest) {
     const activeBirdId = user.activeBird || 'pigeon';
 
     // Fetch dynamic active species from MongoDB
-    const dbSpecies = await BirdSpecies.find({ isActive: true }).sort({ minLevel: 1, priceGold: 1 }).lean();
+    const dbSpecies = await BirdSpecies.find({ isActive: true }).sort({ minLevel: 1, priceGold: 1 }).lean<IBirdSpecies[]>();
 
-    const birds = dbSpecies.map((spec: any) => {
+    const birds = dbSpecies.map((spec) => {
       const isOwned = ownedBirds.includes(spec.speciesId);
       const isCurrentCarrier = activeBirdId === spec.speciesId;
 

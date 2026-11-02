@@ -22,8 +22,8 @@ export async function PATCH(
     const message = await Message.findById(id).lean();
     if (!message) return NextResponse.json({ error: 'Message not found' }, { status: 404, headers: CORS_HEADERS });
 
-    const recipientId = (message.recipientId as any)?.toString?.() ?? String(message.recipientId);
-    const senderId = (message.senderId as any)?.toString?.() ?? String(message.senderId);
+    const recipientId = message.recipientId?.toString?.() ?? String(message.recipientId);
+    const senderId = message.senderId?.toString?.() ?? String(message.senderId);
 
     if (recipientId !== auth.userId && senderId !== auth.userId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: CORS_HEADERS });

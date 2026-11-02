@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if user is banned (a séma jelenleg nem tartalmaz status mezőt; előre-kompatibilis ellenőrzés)
-    if ((user as any).status === 'banned') {
+    if ((user as { status?: string }).status === 'banned') {
       return NextResponse.json({ error: 'Account is banned' }, { status: 403, headers: CORS_HEADERS });
     }
 

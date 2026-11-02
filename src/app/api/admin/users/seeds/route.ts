@@ -14,17 +14,21 @@ export async function POST(req: NextRequest) {
 
     const numAmount = parseAdminAmount(amount);
     if (!userId || numAmount === null) {
-      return NextResponse.json({ error: 'Missing or invalid parameters' }, { status: 400 });
+      return NextResponse.json({ error: 'Hiányzó vagy érvénytelen paraméter (az összeg 0-tól különböző egész szám, legfeljebb ±10 000 000)' }, { status: 400 });
     }
 
     await connectToDatabase();
     
-    await User.findByIdAndUpdate(userId, { 
-      $inc: { 'inventory.seeds': numAmount } 
-    });
+    // Régi/hiányos dokumentumnál az `inventory` lehet null: ilyenkor a $inc hibát dobna
+    await User.updateOne({ _id: userId, inventory: null }, { $set: { inventory: { seeds: 0, cages: 0 } } });
+    const updated = await User.findByIdAndUpdate(userId, { $inc: { 'inventory.seeds': numAmount } }, { new: true });
+    if (!updated) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, newSeeds: updated.inventory?.seeds });
   } catch (error) {
+    console.error('POST /api/admin/users/seeds error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
 }

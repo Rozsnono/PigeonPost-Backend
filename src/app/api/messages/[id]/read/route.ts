@@ -28,7 +28,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: CORS_HEADERS });
     }
 
-    let body: any = {};
+    let body: { action?: string } = {};
     try {
       body = await req.json();
     } catch {

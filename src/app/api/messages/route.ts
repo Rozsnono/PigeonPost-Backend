@@ -6,6 +6,38 @@ import Pigeon from '@/models/Pigeon';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 
+/** Populate-olt hivatkozás (felhasználó vagy galamb) a lean üzenetben. */
+interface PopulatedDoc {
+  _id?: { toString(): string };
+  username?: string;
+  name?: string;
+  expoPushToken?: string | null;
+  location?: { city?: string };
+}
+
+/** Lean üzenet populate-olt mezőkkel; az auto-érkeztetés a memóriabeli másolatot módosítja. */
+interface MessageLean {
+  _id: unknown;
+  senderId?: PopulatedDoc | null;
+  recipientId?: PopulatedDoc | null;
+  pigeonId?: PopulatedDoc | null;
+  pigeonIds?: PopulatedDoc[];
+  status?: string;
+  returningStatus?: string;
+  returnDispatchedAt?: Date;
+  returnEstimatedArrivalAt?: Date;
+  estimatedArrivalAt: Date;
+  flightDurationMinutes?: number;
+  deliveryGoldReward?: number;
+  distanceKm?: number;
+  isFlock?: boolean;
+  flockSize?: number;
+  returnedNotified?: boolean;
+  deliveredNotified?: boolean;
+  senderDeliveredNotified?: boolean;
+  [key: string]: unknown;
+}
+
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
@@ -20,7 +52,7 @@ export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
 
-    let query: any = {};
+    let query: Record<string, unknown> = {};
     if (type === 'inbox') {
       query = { recipientId: auth.userId };
     } else if (type === 'sent') {
@@ -35,13 +67,12 @@ export async function GET(req: NextRequest) {
       .populate('recipientId', 'username avatar location expoPushToken')
       .populate('pigeonId', 'name identifier species status level speedKmH')
       .populate('pigeonIds', 'name identifier species status level speedKmH')
-      .lean();
+      .lean<MessageLean[]>();
 
     const now = new Date();
 
-    const messages = messagesRaw.map((m: any) => {
+    const messages = messagesRaw.map((m) => {
       const isRecipient = m.recipientId?._id?.toString() === auth.userId;
-      const isSender = m.senderId?._id?.toString() === auth.userId;
 
       // Auto-arrive returning pigeons
       if (m.returningStatus === 'returning' && m.returnEstimatedArrivalAt && new Date(m.returnEstimatedArrivalAt) <= now) {
@@ -49,7 +80,7 @@ export async function GET(req: NextRequest) {
         Message.findByIdAndUpdate(m._id, { returningStatus: 'returned', returnedNotified: true }).exec();
         
         if (m.pigeonIds && m.pigeonIds.length > 0) {
-          const pids = m.pigeonIds.map((p: any) => p._id || p);
+          const pids = m.pigeonIds.map((p) => p._id || p);
           Pigeon.updateMany({ _id: { $in: pids } }, { status: 'idle' }).exec();
         } else if (m.pigeonId?._id || m.pigeonId) {
           const pid = m.pigeonId?._id || m.pigeonId;
@@ -81,7 +112,7 @@ export async function GET(req: NextRequest) {
         }
 
         const pids = m.pigeonIds && m.pigeonIds.length > 0
-          ? m.pigeonIds.map((p: any) => p._id || p)
+          ? m.pigeonIds.map((p) => p._id || p)
           : (m.pigeonId?._id || m.pigeonId ? [m.pigeonId?._id || m.pigeonId] : []);
 
         for (const pid of pids) {
@@ -160,7 +191,7 @@ export async function GET(req: NextRequest) {
           m.returningStatus = 'returned';
           Message.findByIdAndUpdate(m._id, { returningStatus: 'returned' }).exec();
           if (m.pigeonIds && m.pigeonIds.length > 0) {
-            const pids = m.pigeonIds.map((p: any) => p._id || p);
+            const pids = m.pigeonIds.map((p) => p._id || p);
             Pigeon.updateMany({ _id: { $in: pids } }, { status: 'idle' }).exec();
           } else if (m.pigeonId?._id || m.pigeonId) {
             const pid = m.pigeonId?._id || m.pigeonId;
@@ -179,7 +210,7 @@ export async function GET(req: NextRequest) {
           }).exec();
 
           if (m.pigeonIds && m.pigeonIds.length > 0) {
-            const pids = m.pigeonIds.map((p: any) => p._id || p);
+            const pids = m.pigeonIds.map((p) => p._id || p);
             Pigeon.updateMany({ _id: { $in: pids } }, { status: 'returning' }).exec();
           } else if (m.pigeonId?._id || m.pigeonId) {
             const pid = m.pigeonId?._id || m.pigeonId;

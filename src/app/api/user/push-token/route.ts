@@ -1,47 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
-import { getJwtSecret, CORS_HEADERS } from '@/lib/auth';
+import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
+import { isExpoPushToken } from '@/lib/push';
 
 export async function OPTIONS() {
   return NextResponse.json({}, { headers: CORS_HEADERS });
 }
 
-function withCors(response: NextResponse) {
-  response.headers.set('Access-Control-Allow-Origin', CORS_HEADERS['Access-Control-Allow-Origin']);
-  return response;
-}
-
+// POST /api/user/push-token — az eszköz Expo push tokenjének regisztrálása a bejelentkezett felhasználóhoz.
+// Egy token egyszerre csak egy felhasználóhoz tartozhat (közös eszközön fiókváltáskor nem kapja meg más az értesítést).
 export async function POST(req: NextRequest) {
+  const auth = verifyAuth(req);
+  if (!auth) return unauthorizedResponse();
+
   try {
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return withCors(NextResponse.json({ error: 'Missing token' }, { status: 401 }));
-    }
-    const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, getJwtSecret()) as { userId: string };
-
-    const body = await req.json();
-    const { pushToken } = body;
-
-    if (!pushToken) {
-      return withCors(NextResponse.json({ error: 'Missing pushToken' }, { status: 400 }));
+    const body = await req.json().catch(() => ({}));
+    const pushToken = body?.pushToken;
+    if (!isExpoPushToken(pushToken)) {
+      return NextResponse.json({ error: 'Érvénytelen pushToken' }, { status: 400, headers: CORS_HEADERS });
     }
 
     await connectToDatabase();
-
-    const user = await User.findById(decoded.userId);
-    if (!user) {
-      return withCors(NextResponse.json({ error: 'User not found' }, { status: 404 }));
+    const res = await User.updateOne({ _id: auth.userId }, { $set: { expoPushToken: pushToken } });
+    if (res.matchedCount === 0) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
     }
+    await User.updateMany(
+      { _id: { $ne: auth.userId }, expoPushToken: pushToken },
+      { $set: { expoPushToken: null } }
+    );
 
-    user.expoPushToken = pushToken;
-    await user.save();
-
-    return withCors(NextResponse.json({ success: true }));
+    return NextResponse.json({ success: true }, { headers: CORS_HEADERS });
   } catch (error) {
     console.error('Update push token error:', error);
-    return withCors(NextResponse.json({ error: 'Server Error' }, { status: 500 }));
+    return NextResponse.json({ error: 'Server Error' }, { status: 500, headers: CORS_HEADERS });
+  }
+}
+
+// DELETE /api/user/push-token — kijelentkezéskor leválasztja az eszközt (nincs értesítés kilépett fiókra).
+export async function DELETE(req: NextRequest) {
+  const auth = verifyAuth(req);
+  if (!auth) return unauthorizedResponse();
+
+  try {
+    await connectToDatabase();
+    await User.updateOne({ _id: auth.userId }, { $set: { expoPushToken: null } });
+    return NextResponse.json({ success: true }, { headers: CORS_HEADERS });
+  } catch (error) {
+    console.error('Delete push token error:', error);
+    return NextResponse.json({ error: 'Server Error' }, { status: 500, headers: CORS_HEADERS });
   }
 }

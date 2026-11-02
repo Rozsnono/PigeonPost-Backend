@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminRequest } from '@/lib/adminAuth';
 import connectToDatabase from '@/lib/db';
-import WheelSlot from '@/models/WheelSlot';
+import WheelSlot, { type IWheelSlot } from '@/models/WheelSlot';
 import { createLog } from '@/lib/logger';
 
 export const DEFAULT_WHEEL_SLOTS = [
@@ -23,22 +23,22 @@ export async function GET(req: NextRequest) {
 
     await connectToDatabase();
 
-    let slots = await WheelSlot.find().sort({ order: 1, createdAt: 1 }).lean();
+    let slots = await WheelSlot.find().sort({ order: 1, createdAt: 1 }).lean<IWheelSlot[]>();
 
     if (!slots || slots.length === 0) {
       await WheelSlot.insertMany(DEFAULT_WHEEL_SLOTS);
-      slots = await WheelSlot.find().sort({ order: 1, createdAt: 1 }).lean();
+      slots = await WheelSlot.find().sort({ order: 1, createdAt: 1 }).lean<IWheelSlot[]>();
     }
 
-    const totalWeight = slots.filter((s: any) => s.isActive !== false).reduce((acc: number, s: any) => acc + (s.weight || 1), 0);
+    const totalWeight = slots.filter((s) => s.isActive !== false).reduce((acc: number, s) => acc + (s.weight || 1), 0);
 
-    const enrichedSlots = slots.map((s: any) => ({
+    const enrichedSlots = slots.map((s) => ({
       ...s,
       chancePercent: totalWeight > 0 ? Number(((s.weight / totalWeight) * 100).toFixed(1)) : 0,
     }));
 
     return NextResponse.json({ slots: enrichedSlots, totalWeight });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('GET /api/admin/wheel error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       await createLog('info', 'Admin', `Új pörgetőskerék szelet hozzáadva: ${created.label} (${created.weight} súly, ${created.amount} ${created.type})`);
       return NextResponse.json({ success: true, message: `"${created.label}" sikeresen létrehozva!`, slot: created });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('POST /api/admin/wheel error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
@@ -129,7 +129,7 @@ export async function DELETE(req: NextRequest) {
     await createLog('warn', 'Admin', `Pörgetőskerék szelet törölve: ${slot.label}`);
 
     return NextResponse.json({ success: true, message: `"${slot.label}" törölve lett.` });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('DELETE /api/admin/wheel error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
@@ -150,7 +150,7 @@ export async function PUT(req: NextRequest) {
 
     const slots = await WheelSlot.find().sort({ order: 1 });
     return NextResponse.json({ success: true, message: 'Pörgetőskerék alaphelyzetbe állítva!', slots });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('PUT /api/admin/wheel error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }

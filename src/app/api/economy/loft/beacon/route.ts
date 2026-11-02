@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       },
       { status: 200, headers: CORS_HEADERS }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('GET /api/economy/loft/beacon error:', error);
     return NextResponse.json({ error: 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
   }
@@ -97,7 +97,7 @@ async function handlePOST(req: NextRequest) {
       },
       { status: 200, headers: CORS_HEADERS }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('POST /api/economy/loft/beacon error:', error);
     return NextResponse.json({ error: 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
   }

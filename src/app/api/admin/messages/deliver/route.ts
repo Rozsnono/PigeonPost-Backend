@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       success: true,
       message: 'A repülés azonnal lezárult, a levél kézbesítve lett.',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('POST /api/admin/messages/deliver error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }

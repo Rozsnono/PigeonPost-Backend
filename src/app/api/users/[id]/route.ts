@@ -30,7 +30,7 @@ export async function GET(
       return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
     }
 
-    const isFriend = Array.isArray(user.friends) && user.friends.some((f: any) => f.toString() === auth.userId);
+    const isFriend = Array.isArray(user.friends) && user.friends.some((f: { toString(): string }) => f.toString() === auth.userId);
 
     return NextResponse.json(
       {
@@ -40,7 +40,7 @@ export async function GET(
           avatar: user.avatar,
           level: user.level,
           stats: user.stats || { sentCount: 0, receivedCount: 0, maxDistance: 0 },
-          location: (user as any).location,
+          location: user.location,
           createdAt: user.createdAt,
           pigeonCount,
           isFriend,

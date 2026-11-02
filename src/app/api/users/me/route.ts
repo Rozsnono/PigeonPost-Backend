@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
 import connectToDatabase from '@/lib/db';
-import User from '@/models/User';
+import User, { type IUserLanguage } from '@/models/User';
 import Message from '@/models/Message';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 import { createLog } from '@/lib/logger';
@@ -50,7 +50,7 @@ export async function PATCH(req: NextRequest) {
     await connectToDatabase();
     const body = await req.json();
 
-    const updateFields: any = {};
+    const updateFields: Record<string, unknown> & { location?: { city: string; lat: number; lng: number; updatedAt: Date } } = {};
 
     if (body.location) {
       updateFields.location = {
@@ -120,7 +120,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (Array.isArray(body.languages)) {
-      updateFields.languages = body.languages.map((l: any) => ({
+      updateFields.languages = body.languages.map((l: Partial<IUserLanguage>) => ({
         code: String(l.code || 'hu'),
         name: String(l.name || 'Hungarian'),
         isNative: Boolean(l.isNative),

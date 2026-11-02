@@ -4,7 +4,7 @@ export interface ILog extends Document {
   level: 'info' | 'warn' | 'error';
   message: string;
   context: string; // The service or module (e.g., 'AuthService', 'PhysicsEngine')
-  metadata?: any; // Additional data as JSON
+  metadata?: unknown; // Additional data as JSON
   createdAt: Date;
 }
 

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
-import Message from '@/models/Message';
 import Log from '@/models/Log';
 import { isAdminRequest } from '@/lib/adminAuth';
 

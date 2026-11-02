@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       success: true,
       message: `${pigeon.name} azonnal hazaért a dúcba, fáradtsága 0%-ra csökkent.`,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('POST /api/admin/pigeons/recall error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }

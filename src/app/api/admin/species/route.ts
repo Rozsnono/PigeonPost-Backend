@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import User from '@/models/User';
-import BirdSpecies from '@/models/BirdSpecies';
+import BirdSpecies, { type IBirdSpecies } from '@/models/BirdSpecies';
 import { ensureDefaultSpecies } from '@/app/api/aviary/route';
 import { createLog } from '@/lib/logger';
 import { isAdminRequest } from '@/lib/adminAuth';
@@ -20,11 +20,11 @@ export async function GET(req: NextRequest) {
     await connectToDatabase();
     await ensureDefaultSpecies();
 
-    const speciesList = await BirdSpecies.find({}).sort({ minLevel: 1, priceGold: 1 }).lean();
+    const speciesList = await BirdSpecies.find({}).sort({ minLevel: 1, priceGold: 1 }).lean<IBirdSpecies[]>();
 
     // Calculate owner counts for each species
     const speciesWithStats = await Promise.all(
-      speciesList.map(async (spec: any) => {
+      speciesList.map(async (spec) => {
         const ownersCount = await User.countDocuments({ ownedBirds: spec.speciesId });
         const activeCarriersCount = await User.countDocuments({ activeBird: spec.speciesId });
         return {
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     await createLog('info', 'Admin', `Új madárfajta hozzáadva: ${newSpecies.name} (${cleanId}), Sebesség: ${speed} km/h, Ár: ${price} arany`, { speciesId: cleanId });
 
     return NextResponse.json(newSpecies, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('POST /api/admin/species error:', error);
     return NextResponse.json({ error: 'Hiba történt a mentés során' }, { status: 500 });
   }
@@ -147,7 +147,7 @@ export async function PUT(req: NextRequest) {
     await createLog('info', 'Admin', `Madárfajta frissítve: ${spec.name} (${spec.speciesId})`, { speciesId: spec.speciesId });
 
     return NextResponse.json(spec);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('PUT /api/admin/species error:', error);
     return NextResponse.json({ error: 'Hiba a frissítés során' }, { status: 500 });
   }
@@ -192,7 +192,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true, isActive: spec.isActive });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('DELETE /api/admin/species error:', error);
     return NextResponse.json({ error: 'Hiba a törlés során' }, { status: 500 });
   }

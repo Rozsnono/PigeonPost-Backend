@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/db';
 import { escapeRegex } from '@/lib/escapeRegex';
-import User from '@/models/User';
+import User, { type IUser } from '@/models/User';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 
 export async function OPTIONS() {
@@ -50,21 +50,21 @@ export async function GET(req: NextRequest) {
     const language = searchParams.get('language')?.trim() || '';
     const interest = searchParams.get('interest')?.trim() || '';
 
-    const excludedIds: any[] = [auth.userId];
+    const excludedIds: unknown[] = [auth.userId];
     if (me.friends && Array.isArray(me.friends)) {
-      me.friends.forEach((id: any) => excludedIds.push(id));
+      me.friends.forEach((id: unknown) => excludedIds.push(id));
     }
     if (me.sentFriendRequests && Array.isArray(me.sentFriendRequests)) {
-      me.sentFriendRequests.forEach((id: any) => excludedIds.push(id));
+      me.sentFriendRequests.forEach((id: unknown) => excludedIds.push(id));
     }
     if (me.pendingFriendRequests && Array.isArray(me.pendingFriendRequests)) {
-      me.pendingFriendRequests.forEach((id: any) => excludedIds.push(id));
+      me.pendingFriendRequests.forEach((id: unknown) => excludedIds.push(id));
     }
     if (me.blockedUsers && Array.isArray(me.blockedUsers)) {
-      me.blockedUsers.forEach((id: any) => excludedIds.push(id));
+      me.blockedUsers.forEach((id: unknown) => excludedIds.push(id));
     }
 
-    const filter: any = {
+    const filter: Record<string, unknown> = {
       _id: { $nin: excludedIds },
       blockedUsers: { $ne: auth.userId },
       isDeleted: false,
@@ -94,12 +94,12 @@ export async function GET(req: NextRequest) {
     const usersRaw = await User.find(filter)
       .select('username avatar level location isLocationPrivate birthday zodiac gender languages interests bio messagePreferences stats stamps ownedBirds activeBird updatedAt')
       .limit(60)
-      .lean();
+      .lean<Array<IUser & { gender?: string }>>();
 
     const myLat = me.location?.lat || 47.4979;
     const myLng = me.location?.lng || 19.0402;
 
-    const formattedUsers = usersRaw.map((u: any) => {
+    const formattedUsers = usersRaw.map((u) => {
       let distanceKm: number | null = null;
       if (u.location?.lat && u.location?.lng) {
         distanceKm = calculateHaversineKm(myLat, myLng, u.location.lat, u.location.lng);

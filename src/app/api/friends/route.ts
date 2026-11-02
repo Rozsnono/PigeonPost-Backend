@@ -5,6 +5,12 @@ import User from '@/models/User';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 
+/** Objektum, aminek van toString-je (pl. ObjectId). */
+type IdLike = { toString(): string };
+
+/** Populate-olt barát/kérés bejegyzés (null, ha a felhasználó törölve lett). */
+type PopulatedRef = { _id?: IdLike } | null;
+
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
@@ -40,13 +46,13 @@ export async function GET(req: NextRequest) {
     if (!me) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
 
     // Filter out nulls (e.g. deleted users), non-objects, and self (data integrity)
-    const cleanList = (arr: any[]) =>
-      (arr ?? []).filter((u: any) => u && typeof u === 'object' && u._id && u._id.toString() !== auth.userId);
+    const cleanList = (arr: PopulatedRef[]) =>
+      (arr ?? []).filter((u) => u && typeof u === 'object' && u._id && u._id.toString() !== auth.userId);
 
     return NextResponse.json({
-      friends: cleanList(me.friends as any[]),
-      pendingRequests: cleanList(me.pendingFriendRequests as any[]),
-      sentRequests: cleanList(me.sentFriendRequests as any[]),
+      friends: cleanList(me.friends as PopulatedRef[]),
+      pendingRequests: cleanList(me.pendingFriendRequests as PopulatedRef[]),
+      sentRequests: cleanList(me.sentFriendRequests as PopulatedRef[]),
     }, { status: 200, headers: CORS_HEADERS });
   } catch (error) {
     console.error('GET /api/friends error:', error);
@@ -74,12 +80,12 @@ export async function POST(req: NextRequest) {
     ]);
     if (!me || !target) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: CORS_HEADERS });
 
-    const alreadyFriends = me.friends?.some((id: any) => id.toString() === targetUserId);
+    const alreadyFriends = me.friends?.some((id: IdLike) => id.toString() === targetUserId);
     if (alreadyFriends) return NextResponse.json({ error: 'Already friends' }, { status: 409, headers: CORS_HEADERS });
 
     // Check if there is an incoming request from target to me (or if target recorded sending to me)
-    const targetSentMe = target.sentFriendRequests?.some((id: any) => id.toString() === auth.userId);
-    const iHavePendingFromTarget = me.pendingFriendRequests?.some((id: any) => id.toString() === targetUserId);
+    const targetSentMe = target.sentFriendRequests?.some((id: IdLike) => id.toString() === auth.userId);
+    const iHavePendingFromTarget = me.pendingFriendRequests?.some((id: IdLike) => id.toString() === targetUserId);
 
     if (targetSentMe || iHavePendingFromTarget) {
       // Accept: add both as mutual friends, clean up all request arrays on both sides
@@ -108,7 +114,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'Friend request accepted — you are now friends!' }, { status: 200, headers: CORS_HEADERS });
     }
 
-    const alreadySent = me.sentFriendRequests?.some((id: any) => id.toString() === targetUserId);
+    const alreadySent = me.sentFriendRequests?.some((id: IdLike) => id.toString() === targetUserId);
     if (alreadySent) return NextResponse.json({ error: 'Request already sent' }, { status: 409, headers: CORS_HEADERS });
 
     // Normal send: add target to my sent, add me to target's pending

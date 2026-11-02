@@ -1,3 +1,4 @@
+import type { Types } from 'mongoose';
 import User from '@/models/User';
 import Pigeon from '@/models/Pigeon';
 
@@ -10,7 +11,7 @@ import Pigeon from '@/models/Pigeon';
  * 4. If satiety reaches 0% and remains at 0% for 24+ hours with no food, the bird flies away ('stray').
  *    Stray birds can be lured back with 25 seeds from the player's inventory.
  */
-export async function simulateLoftTimeDelta(userId: string | any) {
+export async function simulateLoftTimeDelta(userId: string | Types.ObjectId) {
   try {
     const now = new Date();
     const user = await User.findById(userId);

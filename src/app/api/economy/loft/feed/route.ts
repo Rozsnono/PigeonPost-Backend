@@ -43,9 +43,9 @@ export async function GET(req: NextRequest) {
       },
       { headers: CORS_HEADERS }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[loft/feed GET] Error:', err);
-    return NextResponse.json({ error: err.message || 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
+    return NextResponse.json({ error: (err instanceof Error && err.message) || 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
   }
 }
 
@@ -91,8 +91,8 @@ async function handlePOST(req: NextRequest) {
       strayPigeon.status = 'idle';
       strayPigeon.satiety = 60;
       strayPigeon.fatigue = 20;
-      strayPigeon.straySince = null as any;
-      strayPigeon.starvingSince = null as any;
+      strayPigeon.straySince = null;
+      strayPigeon.starvingSince = null;
       strayPigeon.lastLoftTickAt = new Date();
       await strayPigeon.save();
 
@@ -206,9 +206,9 @@ async function handlePOST(req: NextRequest) {
       },
       { headers: CORS_HEADERS }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[loft/feed POST] Error:', err);
-    return NextResponse.json({ error: err.message || 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
+    return NextResponse.json({ error: (err instanceof Error && err.message) || 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
   }
 }
 

@@ -7,6 +7,20 @@ import { createLog } from '@/lib/logger';
 
 let isRunning = false;
 
+/** Populate-olt (lean) felhasználó a cron által használt mezőkkel. */
+interface PopulatedUser {
+  _id?: unknown;
+  username?: string;
+  expoPushToken?: string | null;
+  location?: { city?: string };
+}
+
+/** Populate-olt (lean) galamb a cron által használt mezőkkel. */
+interface PopulatedPigeon {
+  _id?: unknown;
+  name?: string;
+}
+
 /**
  * Checks for arriving letters and returning pigeons, updates DB & triggers Expo push notifications.
  * Works even when the recipient's or sender's mobile app is closed or in background!
@@ -43,9 +57,9 @@ export async function checkFlightStatuses() {
 
       deliveredCount++;
 
-      if (m.recipientId && typeof m.recipientId === 'object' && (m.recipientId as any).expoPushToken) {
-        const recipient = m.recipientId as any;
-        const sender = m.senderId as any;
+      if (m.recipientId && typeof m.recipientId === 'object' && (m.recipientId as PopulatedUser).expoPushToken) {
+        const recipient = m.recipientId as PopulatedUser;
+        const sender = m.senderId as PopulatedUser;
         const senderName = sender?.username || 'Egy ismerősöd';
         const originCity = sender?.location?.city || 'Ismeretlen város';
         const birdText = m.isFlock ? `Egy ${m.flockSize || 1} madárból álló raj` : 'Egy futárgalamb';
@@ -60,14 +74,14 @@ export async function checkFlightStatuses() {
         });
       }
 
-      if (m.senderId && typeof m.senderId === 'object' && (m.senderId as any).expoPushToken) {
-        const sender = m.senderId as any;
-        const recipient = m.recipientId as any;
+      if (m.senderId && typeof m.senderId === 'object' && (m.senderId as PopulatedUser).expoPushToken) {
+        const sender = m.senderId as PopulatedUser;
+        const recipient = m.recipientId as PopulatedUser;
         const recipientName = recipient?.username || 'Címzett';
         const title = m.isFlock ? '🦅 A madárraj célba ért!' : '🕊️ A galambod odaért!';
         const body = m.isFlock
           ? `A ${m.flockSize || 1} madárból álló raj sikeresen átadta a levelet ${recipientName} dúcában!`
-          : `${(m.pigeonId as any)?.name || 'A galambod'} sikeresen odaért a levéllel ${recipientName} dúcába!`;
+          : `${(m.pigeonId as PopulatedPigeon)?.name || 'A galambod'} sikeresen odaért a levéllel ${recipientName} dúcába!`;
 
         await sendPushToUser(
           sender,
@@ -136,8 +150,8 @@ export async function checkFlightStatuses() {
       const pigeonXpEarned = Math.max(20, Math.round(20 + (m.distanceKm || 1) * 0.5));
 
       const pids = m.pigeonIds && m.pigeonIds.length > 0
-        ? m.pigeonIds.map((p: any) => p._id || p)
-        : [(m.pigeonId as any)?._id || m.pigeonId].filter(Boolean);
+        ? m.pigeonIds.map((p: PopulatedPigeon) => p._id || p)
+        : [(m.pigeonId as PopulatedPigeon)?._id || m.pigeonId].filter(Boolean);
 
       for (const pid of pids) {
         const pig = await Pigeon.findById(pid);
@@ -158,7 +172,7 @@ export async function checkFlightStatuses() {
 
       // Credit delivery gold reward & XP to sender
       const goldReward = m.deliveryGoldReward || Math.max(5, Math.round(5 + (m.distanceKm || 1) / 15));
-      const senderUserId = (m.senderId as any)?._id || m.senderId;
+      const senderUserId = (m.senderId as PopulatedUser)?._id || m.senderId;
       if (senderUserId) {
         const sUser = await User.findById(senderUserId);
         if (sUser) {
@@ -178,9 +192,9 @@ export async function checkFlightStatuses() {
 
       returnedCount++;
 
-      if (m.senderId && typeof m.senderId === 'object' && (m.senderId as any).expoPushToken) {
-        const sender = m.senderId as any;
-        const pigeon = m.pigeonId as any;
+      if (m.senderId && typeof m.senderId === 'object' && (m.senderId as PopulatedUser).expoPushToken) {
+        const sender = m.senderId as PopulatedUser;
+        const pigeon = m.pigeonId as PopulatedPigeon;
         const pigeonName = m.isFlock 
           ? `A(z) ${m.flockSize || 1} tagú madárrajod` 
           : (pigeon?.name || 'Postagalambod');
@@ -211,9 +225,9 @@ export async function checkFlightStatuses() {
       returnedCount,
       timestamp: now.toISOString(),
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[checkFlightStatuses] Error:', error);
-    return { error: error?.message || 'Flight check error' };
+    return { error: (error instanceof Error && error.message) || 'Flight check error' };
   } finally {
     isRunning = false;
   }

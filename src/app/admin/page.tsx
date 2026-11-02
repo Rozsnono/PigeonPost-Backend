@@ -31,13 +31,129 @@ const I = {
   Key: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 2-2 2m-1.5 1.5L16 7l-2-2-4 4-2-2L2 13a6 6 0 1 0 8.5 8.5L21 11.5V7h-4.5z"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>,
 };
 
+/** Az admin API-k válaszainak a felületen használt mezői. */
+interface AdminUser {
+  _id: string;
+  username: string;
+  email?: string;
+  role?: string;
+  isDeleted?: boolean;
+  pinColor?: string;
+  level?: number;
+  gold?: number;
+  inventory?: { seeds?: number; cages?: number };
+  location?: { city?: string };
+  createdAt?: string;
+}
+
+interface AdminPigeon {
+  _id: string;
+  name: string;
+  identifier?: string;
+  level?: number;
+  xp?: number;
+  speedKmH?: number;
+  fatigue?: number;
+  status: string;
+  species?: string;
+  ownerId?: { username?: string; email?: string } | null;
+}
+
+interface AdminSpecies {
+  _id?: string;
+  speciesId: string;
+  name: string;
+  subtitle?: string;
+  speedKmH: number;
+  priceGold: number;
+  minLevel?: number;
+  requirementText?: string;
+  avatarBase64?: string;
+  flyingBase64?: string;
+  sizeRank?: number;
+  isActive?: boolean;
+  ownersCount?: number;
+  activeCarriersCount?: number;
+}
+
+type WheelType = 'gold' | 'seeds' | 'cages' | 'xp';
+type WheelRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic';
+
+interface AdminWheelSlot {
+  _id: string;
+  slotId?: string;
+  label: string;
+  type?: WheelType;
+  amount: number;
+  weight?: number;
+  color?: string;
+  rarity: WheelRarity;
+  isActive?: boolean;
+  chancePercent?: number;
+}
+
+interface CityStamp {
+  id?: string;
+  code: string;
+  name: string;
+  country?: string;
+}
+
+interface AdminCity {
+  _id: string;
+  cityId?: string;
+  name: string;
+  country?: string;
+  lat?: number;
+  lng?: number;
+  description?: string;
+  icon?: string;
+  minLevel?: number;
+  rewardMultiplier?: number;
+  cageDropChance?: number;
+  stamps?: CityStamp[];
+  isActive?: boolean;
+  order?: number;
+}
+
+interface AdminLog {
+  id: string;
+  timestamp: string;
+  level: string;
+  message: string;
+  context: string;
+}
+
+interface AdminStats {
+  stats?: { activeUsers?: number; flyingPigeons?: number; deadPigeons?: number; seedEconomy?: number };
+  logs?: AdminLog[];
+  serverTime?: string;
+}
+
+interface AdminMessage {
+  _id: string;
+  status: string;
+  distanceKm?: number;
+  dispatchedAt?: string;
+  estimatedArrivalAt?: string;
+  senderId?: { username?: string } | null;
+  recipientId?: { username?: string } | null;
+}
+
+interface AdminMessages {
+  stats?: { totalMessages?: number; flyingMessages?: number; deliveredMessages?: number; lostMessages?: number };
+  activeMessages?: AdminMessage[];
+}
+
+type PigeonStatusFilter = 'all' | 'flying' | 'idle' | 'resting' | 'dead';
+
 type Tab = 'overview' | 'users' | 'pigeons' | 'species' | 'expeditions' | 'wheel' | 'messages' | 'activity';
 
 const C = {
   purple: '#818cf8', blue: '#60a5fa', green: '#34d399', red: '#f87171', yellow: '#fbbf24', amber: '#fbbf24'
 };
 
-function StatCard({ title, value, Icon, color, sub }: { title: string; value: any; Icon: () => React.ReactNode; color: string; sub?: string }) {
+function StatCard({ title, value, Icon, color, sub }: { title: string; value: number | string | null | undefined; Icon: () => React.ReactNode; color: string; sub?: string }) {
   return (
     <div style={{ background: 'rgba(15,21,36,0.8)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: 20, position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: `radial-gradient(circle at 80% 20%,${color}25,transparent 70%)`, pointerEvents: 'none' }} />
@@ -111,11 +227,11 @@ export default function AdminDashboard() {
   const [secret, setSecret] = useState('');
   const [authed, setAuthed] = useState(false);
   const [tab, setTab] = useState<Tab>('overview');
-  const [stats, setStats] = useState<any>(null);
-  const [users, setUsers] = useState<any[]>([]);
-  const [pigeons, setPigeons] = useState<any[]>([]);
-  const [speciesList, setSpeciesList] = useState<any[]>([]);
-  const [msgs, setMsgs] = useState<any>(null);
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [pigeons, setPigeons] = useState<AdminPigeon[]>([]);
+  const [speciesList, setSpeciesList] = useState<AdminSpecies[]>([]);
+  const [msgs, setMsgs] = useState<AdminMessages | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [toast, setToast] = useState('');
@@ -128,7 +244,7 @@ export default function AdminDashboard() {
 
   // Species Modal & Form State
   const [speciesModal, setSpeciesModal] = useState<'add' | 'edit' | null>(null);
-  const [editingSpecies, setEditingSpecies] = useState<any>(null);
+  const [editingSpecies, setEditingSpecies] = useState<AdminSpecies | null>(null);
   const [speciesForm, setSpeciesForm] = useState({
     speciesId: '',
     name: '',
@@ -145,8 +261,8 @@ export default function AdminDashboard() {
   const [speciesSaving, setSpeciesSaving] = useState(false);
 
   // Pigeon Edit Modal State
-  const [editingPigeon, setEditingPigeon] = useState<any | null>(null);
-  const [pigeonStatusFilter, setPigeonStatusFilter] = useState<'all' | 'flying' | 'idle' | 'resting' | 'dead'>('all');
+  const [editingPigeon, setEditingPigeon] = useState<AdminPigeon | null>(null);
+  const [pigeonStatusFilter, setPigeonStatusFilter] = useState<PigeonStatusFilter>('all');
   const [pigeonForm, setPigeonForm] = useState({
     name: '',
     level: 1,
@@ -159,11 +275,11 @@ export default function AdminDashboard() {
   const [pigeonSaving, setPigeonSaving] = useState(false);
 
   // Wheel State
-  const [wheelSlots, setWheelSlots] = useState<any[]>([]);
+  const [wheelSlots, setWheelSlots] = useState<AdminWheelSlot[]>([]);
   const [wheelTotalWeight, setWheelTotalWeight] = useState(0);
   const [wheelModal, setWheelModal] = useState<'add' | 'edit' | null>(null);
-  const [editingWheelSlot, setEditingWheelSlot] = useState<any | null>(null);
-  const [wheelForm, setWheelForm] = useState({
+  const [editingWheelSlot, setEditingWheelSlot] = useState<AdminWheelSlot | null>(null);
+  const [wheelForm, setWheelForm] = useState<{ slotId: string; label: string; type: WheelType; amount: number; weight: number; color: string; rarity: WheelRarity; isActive: boolean }>({
     slotId: '',
     label: '',
     type: 'gold',
@@ -176,9 +292,9 @@ export default function AdminDashboard() {
   const [wheelSaving, setWheelSaving] = useState(false);
 
   // Expedition Cities State
-  const [cities, setCities] = useState<any[]>([]);
+  const [cities, setCities] = useState<AdminCity[]>([]);
   const [cityModal, setCityModal] = useState<'add' | 'edit' | null>(null);
-  const [editingCity, setEditingCity] = useState<any | null>(null);
+  const [editingCity, setEditingCity] = useState<AdminCity | null>(null);
   const [cityForm, setCityForm] = useState({
     cityId: '',
     name: '',
@@ -190,7 +306,7 @@ export default function AdminDashboard() {
     minLevel: 1,
     rewardMultiplier: 1.0,
     cageDropChance: 5,
-    stamps: [] as Array<{ id?: string; code: string; name: string; country?: string }>,
+    stamps: [] as CityStamp[],
     isActive: true,
     order: 0,
   });
@@ -236,6 +352,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!authed) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a setStats csak az aszinkron fetch után fut, nem szinkron az effectben
     if (tab === 'overview' || tab === 'activity') fetchStats();
     if (tab === 'users') fetchUsers();
     if (tab === 'pigeons') {
@@ -322,7 +439,7 @@ export default function AdminDashboard() {
     setSpeciesModal('add');
   };
 
-  const openEditSpecies = (spec: any) => {
+  const openEditSpecies = (spec: AdminSpecies) => {
     setEditingSpecies(spec);
     setSpeciesForm({
       speciesId: spec.speciesId,
@@ -347,7 +464,7 @@ export default function AdminDashboard() {
       const isEdit = speciesModal === 'edit';
       const url = '/api/admin/species';
       const method = isEdit ? 'PUT' : 'POST';
-      const body = isEdit ? { ...speciesForm, _id: editingSpecies._id } : speciesForm;
+      const body = isEdit ? { ...speciesForm, _id: editingSpecies?._id } : speciesForm;
 
       const r = await fetch(url, {
         method,
@@ -406,7 +523,7 @@ export default function AdminDashboard() {
     setWheelModal('add');
   };
 
-  const openEditWheelSlot = (slot: any) => {
+  const openEditWheelSlot = (slot: AdminWheelSlot) => {
     setEditingWheelSlot(slot);
     setWheelForm({
       slotId: slot.slotId || '',
@@ -425,7 +542,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     setWheelSaving(true);
     try {
-      const payload: any = { ...wheelForm };
+      const payload: Record<string, unknown> = { ...wheelForm };
       if (editingWheelSlot?._id) payload._id = editingWheelSlot._id;
       const r = await fetch('/api/admin/wheel', {
         method: 'POST',
@@ -440,8 +557,8 @@ export default function AdminDashboard() {
       } else {
         toast$(`✗ ${d.error || 'Sikertelen mentés'}`);
       }
-    } catch (err: any) {
-      toast$(`✗ Hiba: ${err.message}`);
+    } catch (err: unknown) {
+      toast$(`✗ Hiba: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setWheelSaving(false);
     }
@@ -493,7 +610,7 @@ export default function AdminDashboard() {
     setCityModal('add');
   };
 
-  const openEditCity = (c: any) => {
+  const openEditCity = (c: AdminCity) => {
     setEditingCity(c);
     setCityForm({
       cityId: c.cityId || '',
@@ -541,7 +658,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     setCitySaving(true);
     try {
-      const payload: any = { ...cityForm };
+      const payload: Record<string, unknown> = { ...cityForm };
       if (editingCity?._id) payload._id = editingCity._id;
       const r = await fetch('/api/admin/expeditions/cities', {
         method: 'POST',
@@ -556,8 +673,8 @@ export default function AdminDashboard() {
       } else {
         toast$(`✗ ${d.error || 'Sikertelen mentés'}`);
       }
-    } catch (err: any) {
-      toast$(`✗ Hiba: ${err.message}`);
+    } catch (err: unknown) {
+      toast$(`✗ Hiba: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setCitySaving(false);
     }
@@ -591,7 +708,12 @@ export default function AdminDashboard() {
     const amt = prompt(`Mennyi ${label} adjunk ${uname} számára?`);
     if (!amt || isNaN(+amt)) return;
     const r = await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/json', ...hdr() }, body: JSON.stringify({ userId: uid, amount: +amt }) });
-    if (r.ok) { toast$(`✓ ${amt} ${label} adva: ${uname}`); fetchUsers(); } else toast$(`✗ Sikertelen`);
+    if (r.ok) { toast$(`✓ ${amt} ${label} adva: ${uname}`); fetchUsers(); }
+    else {
+      // A szerver hibaüzenetét is megmutatjuk (pl. érvénytelen összeg, lejárt titok)
+      const detail = await r.json().then((d: { error?: string }) => d?.error).catch(() => undefined);
+      toast$(`✗ Sikertelen (${r.status}${detail ? `: ${detail}` : ''})`);
+    }
   };
 
   const banUser = async (uid: string, uname: string) => {
@@ -647,12 +769,12 @@ export default function AdminDashboard() {
       } else {
         toast$(`✗ ${d.error || 'Sikertelen gyorsítás'}`);
       }
-    } catch (err: any) {
-      toast$(`✗ Hiba: ${err.message}`);
+    } catch (err: unknown) {
+      toast$(`✗ Hiba: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
-  const openEditPigeon = (p: any) => {
+  const openEditPigeon = (p: AdminPigeon) => {
     setEditingPigeon(p);
     setPigeonForm({
       name: p.name || '',
@@ -687,8 +809,8 @@ export default function AdminDashboard() {
       } else {
         toast$(`✗ ${d.error || 'Sikertelen mentés'}`);
       }
-    } catch (err: any) {
-      toast$(`✗ Hiba: ${err.message}`);
+    } catch (err: unknown) {
+      toast$(`✗ Hiba: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setPigeonSaving(false);
     }
@@ -718,7 +840,7 @@ export default function AdminDashboard() {
     let rows = [...users];
     if (search) { const q = search.toLowerCase(); rows = rows.filter(u => u.username?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)); }
     rows.sort((a, b) => {
-      let av = a[sortBy], bv = b[sortBy];
+      let av = (a as unknown as Record<string, string | number>)[sortBy], bv = (b as unknown as Record<string, string | number>)[sortBy];
       if (sortBy === 'seeds') { av = a.inventory?.seeds ?? 0; bv = b.inventory?.seeds ?? 0; }
       if (sortBy === 'gold')  { av = a.gold ?? 0; bv = b.gold ?? 0; }
       if (av < bv) return sortDir === 'asc' ? -1 : 1;
@@ -755,8 +877,8 @@ export default function AdminDashboard() {
   }, [speciesList, search]);
 
   const sortToggle = (col: string) => { if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortBy(col); setSortDir('desc'); } };
-  const SortI = ({ col }: { col: string }) => sortBy !== col ? <span style={{ color: '#374151', marginLeft: 3 }}>⇅</span> : <span style={{ color: C.purple, marginLeft: 3 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
-  const toggleRow = (id: string) => { const n = new Set(selected); n.has(id) ? n.delete(id) : n.add(id); setSelected(n); };
+  const sortIndicator = (col: string) => sortBy !== col ? <span style={{ color: '#374151', marginLeft: 3 }}>⇅</span> : <span style={{ color: C.purple, marginLeft: 3 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  const toggleRow = (id: string) => { const n = new Set(selected); if (n.has(id)) n.delete(id); else n.add(id); setSelected(n); };
 
   const navItems: { id: Tab; label: string; Icon: () => React.ReactNode; badge?: number }[] = [
     { id: 'overview',  label: 'Áttekintés',     Icon: I.Chart,    badge: undefined },
@@ -968,7 +1090,7 @@ export default function AdminDashboard() {
               <table style={{ width: '100%', borderCollapse: 'collapse' as const, fontSize: 13 }}>
                 <thead><tr>{['Időbélyeg','Szint','Üzenet','Kontextus'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {(stats?.logs ?? []).slice(0, 6).map((log: any) => (
+                  {(stats?.logs ?? []).slice(0, 6).map((log: AdminLog) => (
                     <tr key={log.id}>
                       <td style={{ ...td, fontFamily: 'monospace', fontSize: 11, color: '#475569' }}>{log.timestamp}</td>
                       <td style={td}><LogBadge level={log.level} /></td>
@@ -999,20 +1121,20 @@ export default function AdminDashboard() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' as const, fontSize: 13 }}>
                   <thead>
                     <tr>
-                      <th style={{ ...th, width: 36 }}><input type="checkbox" onChange={e => setSelected(e.target.checked ? new Set(sortedUsers.map((u: any) => u._id)) : new Set())} checked={selected.size === sortedUsers.length && sortedUsers.length > 0} /></th>
-                      <th style={th} onClick={() => sortToggle('username')}><span style={{ cursor: 'pointer' }}>Felhasználó<SortI col="username" /></span></th>
+                      <th style={{ ...th, width: 36 }}><input type="checkbox" onChange={e => setSelected(e.target.checked ? new Set(sortedUsers.map((u) => u._id)) : new Set())} checked={selected.size === sortedUsers.length && sortedUsers.length > 0} /></th>
+                      <th style={th} onClick={() => sortToggle('username')}><span style={{ cursor: 'pointer' }}>Felhasználó{sortIndicator('username')}</span></th>
                       <th style={th}>Email</th>
-                      <th style={th} onClick={() => sortToggle('level')}><span style={{ cursor: 'pointer' }}>Szint<SortI col="level" /></span></th>
-                      <th style={th} onClick={() => sortToggle('seeds')}><span style={{ cursor: 'pointer' }}>🌾 Magvak<SortI col="seeds" /></span></th>
-                      <th style={th} onClick={() => sortToggle('gold')}><span style={{ cursor: 'pointer' }}>🪙 Arany<SortI col="gold" /></span></th>
+                      <th style={th} onClick={() => sortToggle('level')}><span style={{ cursor: 'pointer' }}>Szint{sortIndicator('level')}</span></th>
+                      <th style={th} onClick={() => sortToggle('seeds')}><span style={{ cursor: 'pointer' }}>🌾 Magvak{sortIndicator('seeds')}</span></th>
+                      <th style={th} onClick={() => sortToggle('gold')}><span style={{ cursor: 'pointer' }}>🪙 Arany{sortIndicator('gold')}</span></th>
                       <th style={th}>Kalitkák</th>
                       <th style={th}>Helyszín</th>
-                      <th style={th} onClick={() => sortToggle('createdAt')}><span style={{ cursor: 'pointer' }}>Regisztráció<SortI col="createdAt" /></span></th>
+                      <th style={th} onClick={() => sortToggle('createdAt')}><span style={{ cursor: 'pointer' }}>Regisztráció{sortIndicator('createdAt')}</span></th>
                       <th style={th}>Műveletek</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedUsers.map((u: any) => (
+                    {sortedUsers.map((u) => (
                       <tr key={u._id} style={{ background: selected.has(u._id) ? 'rgba(99,102,241,0.06)' : 'transparent' }}>
                         <td style={td}><input type="checkbox" checked={selected.has(u._id)} onChange={() => toggleRow(u._id)} /></td>
                         <td style={td}>
@@ -1076,7 +1198,7 @@ export default function AdminDashboard() {
                   ].map(f => (
                     <button
                       key={f.id}
-                      onClick={() => setPigeonStatusFilter(f.id as any)}
+                      onClick={() => setPigeonStatusFilter(f.id as PigeonStatusFilter)}
                       style={{
                         padding: '4px 10px',
                         borderRadius: 7,
@@ -1102,7 +1224,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredPigeons.map((p: any) => {
+                    {filteredPigeons.map((p) => {
                       const canRecall = p.status === 'flying' || p.status === 'returning' || (p.fatigue && p.fatigue > 0);
                       return (
                         <tr key={p._id}>
@@ -1133,7 +1255,7 @@ export default function AdminDashboard() {
                           </td>
                           <td style={td}><StatusBadge status={p.status} /></td>
                           <td style={{ ...td, minWidth: 120 }}>
-                            <ProgressBar value={p.fatigue ?? 0} color={p.fatigue > 70 ? C.red : p.fatigue > 40 ? C.yellow : C.green} />
+                            <ProgressBar value={p.fatigue ?? 0} color={(p.fatigue ?? 0) > 70 ? C.red : (p.fatigue ?? 0) > 40 ? C.yellow : C.green} />
                           </td>
                           <td style={{ ...td, fontSize: 12, fontWeight: 600, color: '#e2e8f0' }}>
                             ⚡ {p.speedKmH || 80} km/h
@@ -1206,7 +1328,7 @@ export default function AdminDashboard() {
                     <tr>{['Képek','Fajta / Név','Sebesség','Ár (arany)','Követelmény','Raj Rang','Birtoklók','Állapot','Műveletek'].map(h => <th key={h} style={th}>{h}</th>)}</tr>
                   </thead>
                   <tbody>
-                    {filteredSpecies.map((s: any) => (
+                    {filteredSpecies.map((s) => (
                       <tr key={s.speciesId} style={{ opacity: s.isActive === false ? 0.6 : 1 }}>
                         <td style={td}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1279,8 +1401,8 @@ export default function AdminDashboard() {
                             <button
                               style={btn('danger')}
                               onClick={() => deleteSpeciesPermanent(s.speciesId, s.name)}
-                              title={s.ownersCount > 0 ? 'Nem törölhető, mert van gazdája' : 'Végleges törlés'}
-                              disabled={s.ownersCount > 0}
+                              title={(s.ownersCount ?? 0) > 0 ? 'Nem törölhető, mert van gazdája' : 'Végleges törlés'}
+                              disabled={(s.ownersCount ?? 0) > 0}
                             >
                               <I.Trash />
                             </button>
@@ -1354,7 +1476,7 @@ export default function AdminDashboard() {
                   <tbody>
                     {cities
                       .filter(c => !search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.country?.toLowerCase().includes(search.toLowerCase()))
-                      .map((c: any) => (
+                      .map((c) => (
                         <tr key={c._id || c.cityId}>
                           <td style={td}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1407,7 +1529,7 @@ export default function AdminDashboard() {
                           <td style={{ ...td, maxWidth: 280 }}>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                               {Array.isArray(c.stamps) && c.stamps.length > 0 ? (
-                                c.stamps.map((st: any, idx: number) => (
+                                c.stamps.map((st, idx: number) => (
                                   <span
                                     key={st.id || idx}
                                     title={st.name}
@@ -1459,7 +1581,7 @@ export default function AdminDashboard() {
                     {cities.length === 0 && (
                       <tr>
                         <td colSpan={8} style={{ ...td, textAlign: 'center', color: '#64748b', padding: '36px 16px' }}>
-                          Nincsenek expedíciós városok. Kattints a „+ Új Város" vagy „Alapértelmezett Városok" gombra!
+                          Nincsenek expedíciós városok. Kattints a „+ Új Város&quot; vagy „Alapértelmezett Városok&quot; gombra!
                         </td>
                       </tr>
                     )}
@@ -1520,7 +1642,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {wheelSlots.map((slot: any) => {
+                    {wheelSlots.map((slot) => {
                       const typeLabel = slot.type === 'gold' ? 'Arany' : slot.type === 'seeds' ? 'Madármag' : slot.type === 'cages' ? 'Kalitka' : 'Dúcmester XP';
                       const typeIcon = slot.type === 'gold' ? '🪙' : slot.type === 'seeds' ? '🌾' : slot.type === 'cages' ? '🎁' : '⭐';
                       const rarityColor = ({
@@ -1530,7 +1652,7 @@ export default function AdminDashboard() {
                         epic: '#a855f7',
                         legendary: '#f59e0b',
                         mythic: '#fbbf24',
-                      } as any)[slot.rarity] || '#94a3b8';
+                      } as Record<string, string>)[slot.rarity ?? ''] || '#94a3b8';
 
                       return (
                         <tr key={slot._id || slot.slotId}>
@@ -1617,7 +1739,7 @@ export default function AdminDashboard() {
                     {wheelSlots.length === 0 && (
                       <tr>
                         <td colSpan={8} style={{ ...td, textAlign: 'center', color: '#64748b', padding: '36px 16px' }}>
-                          Nincsenek beállított nyeremények. Kattints az „Alapértelmezett" gombra a visszaállításhoz!
+                          Nincsenek beállított nyeremények. Kattints az „Alapértelmezett&quot; gombra a visszaállításhoz!
                         </td>
                       </tr>
                     )}
@@ -1643,9 +1765,9 @@ export default function AdminDashboard() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' as const, fontSize: 13 }}>
                   <thead><tr>{['Feladó','Címzett','Távolság','Elküldve','Várható érkezés / Haladás','Állapot','Késik','Művelet'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
                   <tbody>
-                    {(msgs?.activeMessages ?? []).map((m: any) => {
-                      const sender = typeof m.senderId === 'object' ? m.senderId?.username : '?';
-                      const recipient = typeof m.recipientId === 'object' ? m.recipientId?.username : '?';
+                    {(msgs?.activeMessages ?? []).map((m) => {
+                      const sender = typeof m.senderId === 'object' ? m.senderId?.username ?? '?' : '?';
+                      const recipient = typeof m.recipientId === 'object' ? m.recipientId?.username ?? '?' : '?';
                       const eta = m.estimatedArrivalAt ? new Date(m.estimatedArrivalAt) : null;
                       const isLate = eta && eta < now;
                       const dispatched = m.dispatchedAt ? new Date(m.dispatchedAt).getTime() : now.getTime();
@@ -1678,22 +1800,22 @@ export default function AdminDashboard() {
           {tab === 'activity' && (<>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 18 }}>
               <StatCard title="Napló bejegyzések" value={stats?.logs?.length ?? 0} Icon={I.Activity} color={C.purple} />
-              <StatCard title="Hibák" value={(stats?.logs ?? []).filter((l: any) => l.level === 'error').length} Icon={I.Skull} color={C.red} />
-              <StatCard title="Figyelmeztetések" value={(stats?.logs ?? []).filter((l: any) => l.level === 'warn').length} Icon={I.Zap} color={C.yellow} />
+              <StatCard title="Hibák" value={(stats?.logs ?? []).filter((l) => l.level === 'error').length} Icon={I.Skull} color={C.red} />
+              <StatCard title="Figyelmeztetések" value={(stats?.logs ?? []).filter((l) => l.level === 'warn').length} Icon={I.Zap} color={C.yellow} />
             </div>
             <div style={{ background: 'rgba(15,21,36,0.8)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden' }}>
               <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px 18px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8' }}>📋 Rendszernapló</span>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {(['error','warn','info'] as const).map(level => {
-                    const count = (stats?.logs ?? []).filter((l: any) => l.level === level).length;
+                    const count = (stats?.logs ?? []).filter((l) => l.level === level).length;
                     const [c, bg] = level === 'error' ? [C.red,'rgba(248,113,113,0.12)'] : level === 'warn' ? [C.yellow,'rgba(251,191,36,0.12)'] : [C.blue,'rgba(96,165,250,0.12)'];
                     return <span key={level} style={{ display: 'inline-flex', padding: '2px 9px', borderRadius: 5, fontSize: 10, fontWeight: 700, color: c, background: bg }}>{level.toUpperCase()}: {count}</span>;
                   })}
                 </div>
               </div>
               <div style={{ fontFamily: 'monospace', fontSize: 12 }}>
-                {(stats?.logs ?? []).map((log: any, i: number) => (
+                {(stats?.logs ?? []).map((log, i: number) => (
                   <div key={log.id ?? i} style={{ display: 'flex', gap: 14, padding: '10px 18px', borderBottom: '1px solid rgba(255,255,255,0.04)', alignItems: 'flex-start', background: log.level === 'error' ? 'rgba(248,113,113,0.04)' : log.level === 'warn' ? 'rgba(251,191,36,0.03)' : 'transparent' }}>
                     <span style={{ color: '#374151', whiteSpace: 'nowrap', fontSize: 11, minWidth: 140 }}>{log.timestamp}</span>
                     <LogBadge level={log.level} />
@@ -2069,7 +2191,7 @@ export default function AdminDashboard() {
                     }}
                   >
                     {speciesList && speciesList.length > 0 ? (
-                      speciesList.map((s: any) => (
+                      speciesList.map((s) => (
                         <option key={s.speciesId} value={s.speciesId}>
                           {s.name} ({s.speciesId})
                         </option>
@@ -2190,7 +2312,7 @@ export default function AdminDashboard() {
                   </label>
                   <select
                     value={wheelForm.type}
-                    onChange={e => setWheelForm(prev => ({ ...prev, type: e.target.value as any }))}
+                    onChange={e => setWheelForm(prev => ({ ...prev, type: e.target.value as WheelType }))}
                     style={{
                       width: '100%', padding: '9px 12px', background: '#161d30',
                       border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
@@ -2248,7 +2370,7 @@ export default function AdminDashboard() {
                   </label>
                   <select
                     value={wheelForm.rarity}
-                    onChange={e => setWheelForm(prev => ({ ...prev, rarity: e.target.value as any }))}
+                    onChange={e => setWheelForm(prev => ({ ...prev, rarity: e.target.value as WheelRarity }))}
                     style={{
                       width: '100%', padding: '9px 12px', background: '#161d30',
                       border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,

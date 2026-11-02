@@ -9,6 +9,28 @@ interface MapPickerModalProps {
   onClose: () => void;
 }
 
+/** A Leaflet (CDN-ről töltött) API azon részei, amiket a modal használ. */
+interface LeafletLatLng { lat: number; lng: number }
+interface LeafletMarker {
+  getLatLng(): LeafletLatLng;
+  setLatLng(pos: LeafletLatLng | [number, number]): void;
+  on(event: string, handler: () => void): void;
+  addTo(map: LeafletMap): LeafletMarker;
+}
+interface LeafletMap {
+  remove(): void;
+  invalidateSize(): void;
+  flyTo(center: [number, number], zoom: number, options?: { duration: number }): void;
+  on(event: string, handler: (e: { latlng: LeafletLatLng }) => void): void;
+}
+interface LeafletStatic {
+  Icon: { Default: { prototype: Record<string, unknown>; mergeOptions(options: Record<string, string>): void } };
+  map(id: string, options: Record<string, unknown>): LeafletMap;
+  tileLayer(url: string, options: Record<string, unknown>): { addTo(map: LeafletMap): void };
+  marker(pos: [number, number], options: Record<string, unknown>): LeafletMarker;
+}
+type WindowWithLeaflet = Window & { L?: LeafletStatic };
+
 export default function MapPickerModal({
   visible,
   initialLat,
@@ -21,17 +43,20 @@ export default function MapPickerModal({
   const [isSearching, setIsSearching] = useState(false);
   const [detectedLocation, setDetectedLocation] = useState<{ city?: string; country?: string } | null>(null);
 
-  const mapInstanceRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<LeafletMap | null>(null);
+  const markerRef = useRef<LeafletMarker | null>(null);
 
-  useEffect(() => {
+  // Megnyitáskor / kezdőpont-váltáskor visszaállítjuk az állapotot (renderelés közbeni állapotigazítás, nem effect)
+  const resetKey = `${visible}|${initialLat}|${initialLng}`;
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  if (resetKey !== prevResetKey) {
+    setPrevResetKey(resetKey);
     if (visible) {
       setCoords({ lat: initialLat || 47.4979, lng: initialLng || 19.0402 });
       setDetectedLocation(null);
       setSearchQuery('');
     }
-  }, [visible, initialLat, initialLng]);
+  }
 
   useEffect(() => {
     if (!visible) return;
@@ -49,7 +74,7 @@ export default function MapPickerModal({
       }
 
       // 2. Ensure Leaflet JS is present
-      if (!(window as any).L) {
+      if (!(window as WindowWithLeaflet).L) {
         await new Promise<void>((resolve, reject) => {
           const script = document.createElement('script');
           script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
@@ -61,11 +86,11 @@ export default function MapPickerModal({
 
       if (!isMounted) return;
 
-      const L = (window as any).L;
+      const L = (window as WindowWithLeaflet).L;
       if (!L) return;
 
       // Fix default Leaflet marker icon paths when loaded from CDN
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
+      delete L.Icon.Default.prototype._getIconUrl;
       L.Icon.Default.mergeOptions({
         iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
         iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -76,8 +101,9 @@ export default function MapPickerModal({
       if (!container) return;
 
       // Reset existing leaflet instance on container if any
-      if ((container as any)._leaflet_id) {
-        (container as any)._leaflet_id = null;
+      const leafletContainer = container as HTMLElement & { _leaflet_id?: number | null };
+      if (leafletContainer._leaflet_id) {
+        leafletContainer._leaflet_id = null;
       }
 
       const startLat = initialLat || 47.4979;
@@ -114,7 +140,7 @@ export default function MapPickerModal({
       });
 
       // Click on map event
-      map.on('click', (e: any) => {
+      map.on('click', (e) => {
         marker.setLatLng(e.latlng);
         setCoords({
           lat: Number(e.latlng.lat.toFixed(4)),
@@ -173,7 +199,7 @@ export default function MapPickerModal({
       } else {
         alert('Nem található ilyen helyszín. Próbálj meg más kifejezést!');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Nominatim search error:', err);
       alert('Keresési hiba történt.');
     } finally {

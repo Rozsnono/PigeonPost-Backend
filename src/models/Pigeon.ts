@@ -14,8 +14,8 @@ export interface IPigeon extends Document {
   satiety: number; // 0 to 100 (100 = full, 0 = starving)
   cooldownUntil?: Date; // When it finishes resting
   lastLoftTickAt?: Date;
-  starvingSince?: Date;
-  straySince?: Date;
+  starvingSince?: Date | null;
+  straySince?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -3,10 +3,10 @@ import { withUserLock } from '@/lib/userLock';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/db';
 import { escapeRegex } from '@/lib/escapeRegex';
-import User from '@/models/User';
+import User, { type IUser, type IUserStamp } from '@/models/User';
 import Pigeon from '@/models/Pigeon';
-import Expedition from '@/models/Expedition';
-import ExpeditionCity, { DEFAULT_EXPEDITION_CITIES } from '@/models/ExpeditionCity';
+import Expedition, { type IExpedition } from '@/models/Expedition';
+import ExpeditionCity, { DEFAULT_EXPEDITION_CITIES, type ICityStamp, type IExpeditionCity } from '@/models/ExpeditionCity';
 import { verifyAuth, unauthorizedResponse, CORS_HEADERS } from '@/lib/auth';
 
 export async function OPTIONS() {
@@ -50,18 +50,18 @@ export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
 
-    const user = await User.findById(auth.userId).select('location stamps').lean();
-    const userLat = (user as any)?.location?.lat || 47.4979;
-    const userLng = (user as any)?.location?.lng || 19.0402;
+    const user = await User.findById(auth.userId).select('location stamps').lean<Pick<IUser, 'location' | 'stamps'> | null>();
+    const userLat = user?.location?.lat || 47.4979;
+    const userLng = user?.location?.lng || 19.0402;
 
     // Load active expedition cities from DB, or seed defaults
-    let cities = await ExpeditionCity.find({ isActive: true }).sort({ order: 1, createdAt: 1 }).lean();
+    let cities = await ExpeditionCity.find({ isActive: true }).sort({ order: 1, createdAt: 1 }).lean<IExpeditionCity[]>();
     if (!cities || cities.length === 0) {
       await ExpeditionCity.insertMany(DEFAULT_EXPEDITION_CITIES);
-      cities = await ExpeditionCity.find({ isActive: true }).sort({ order: 1, createdAt: 1 }).lean();
+      cities = await ExpeditionCity.find({ isActive: true }).sort({ order: 1, createdAt: 1 }).lean<IExpeditionCity[]>();
     }
 
-    const destinations = cities.map((city: any) => {
+    const destinations = cities.map((city) => {
       const distKm = calculateDistanceKm(userLat, userLng, city.lat, city.lng);
       const mult = city.rewardMultiplier || 1.0;
       // Duration estimation at baseline 80 km/h speed
@@ -101,12 +101,12 @@ export async function GET(req: NextRequest) {
     })
       .populate('pigeonId', 'name species level status')
       .sort({ createdAt: -1 })
-      .lean();
+      .lean<IExpedition[]>();
 
-    const citiesMap = new Map(cities.map((c: any) => [c.cityId, c]));
+    const citiesMap = new Map(cities.map((c) => [c.cityId, c] as const));
 
     // Auto-update completed expeditions
-    const formatted = expeditions.map((exp: any) => {
+    const formatted = expeditions.map((exp) => {
       const returnTime = new Date(exp.estimatedReturnAt).getTime();
       const isCompleted = now.getTime() >= returnTime || exp.status === 'completed';
       const minutesLeft = Math.max(0, Math.round((returnTime - now.getTime()) / 60000));
@@ -278,9 +278,9 @@ async function handlePOST(req: NextRequest) {
       // Stamp roll: Pick 1 stamp from city's possible stamps, prioritizing uncollected ones
       let wonStamp = null;
       if (city.stamps && city.stamps.length > 0) {
-        const userStampIds = new Set((user.stamps || []).map((s: any) => s.id || s.code));
+        const userStampIds = new Set((user.stamps || []).map((s: IUserStamp) => s.id || s.code));
         const uncollectedStamps = city.stamps.filter(
-          (s: any) => !userStampIds.has(s.id) && !userStampIds.has(s.code)
+          (s: ICityStamp) => !userStampIds.has(s.id) && !userStampIds.has(s.code)
         );
 
         const candidates = uncollectedStamps.length > 0 ? uncollectedStamps : city.stamps;
@@ -372,7 +372,7 @@ async function handlePOST(req: NextRequest) {
         if (expedition.rewardStamp && expedition.rewardStamp.id) {
           if (!user.stamps) user.stamps = [];
           const existingStampIdx = user.stamps.findIndex(
-            (s: any) => s.id === expedition.rewardStamp.id || s.code === expedition.rewardStamp.code
+            (s: IUserStamp) => s.id === expedition.rewardStamp.id || s.code === expedition.rewardStamp.code
           );
 
           if (existingStampIdx >= 0) {
@@ -480,7 +480,7 @@ async function handlePOST(req: NextRequest) {
       { error: 'Érvénytelen action (start vagy claim szükséges)!' },
       { status: 400, headers: CORS_HEADERS }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('POST /api/economy/expeditions error:', error);
     return NextResponse.json(
       { error: 'Belső szerverhiba történt az expedíció során!' },

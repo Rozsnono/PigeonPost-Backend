@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
       activeMessages,
     });
   } catch (error) {
+    console.error('GET /api/admin/messages error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
 }

@@ -10,7 +10,7 @@ export async function createLog(
   level: 'info' | 'warn' | 'error',
   context: string,
   message: string,
-  metadata?: any
+  metadata?: unknown
 ) {
   try {
     await connectToDatabase();

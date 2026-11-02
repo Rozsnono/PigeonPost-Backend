@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
     
     return NextResponse.json(flights);
   } catch (error) {
+    console.error('GET /api/admin/flights error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
 }
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
         pigeonsReturned: pigeonsResult.modifiedCount,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('POST /api/admin/flights accelerate error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }

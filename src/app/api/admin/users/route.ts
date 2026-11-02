@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     
     return NextResponse.json(users);
   } catch (error) {
+    console.error('GET /api/admin/users error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
 }

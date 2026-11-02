@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminRequest } from '@/lib/adminAuth';
 import connectToDatabase from '@/lib/db';
-import ExpeditionCity, { DEFAULT_EXPEDITION_CITIES } from '@/models/ExpeditionCity';
+import ExpeditionCity, { DEFAULT_EXPEDITION_CITIES, type ICityStamp } from '@/models/ExpeditionCity';
 import { createLog } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ cities });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('GET /api/admin/expeditions/cities error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanStamps = Array.isArray(stamps)
-      ? stamps.map((s: any, idx: number) => ({
+      ? stamps.map((s: Partial<ICityStamp>, idx: number) => ({
           id: s.id || `stamp_${(name || 'city').toLowerCase().replace(/\s+/g, '_')}_${idx + 1}`,
           code: (s.code || `${(country || 'XX').slice(0, 2).toUpperCase()}-0${idx + 1}`).trim(),
           name: (s.name || 'Bélyeg').trim(),
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({ success: true, city: newCity });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('POST /api/admin/expeditions/cities error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
@@ -158,7 +158,7 @@ export async function DELETE(req: NextRequest) {
     );
 
     return NextResponse.json({ success: true, message: 'City deleted' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('DELETE /api/admin/expeditions/cities error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
@@ -182,7 +182,7 @@ export async function PUT(req: NextRequest) {
 
     const cities = await ExpeditionCity.find().sort({ order: 1, createdAt: 1 }).lean();
     return NextResponse.json({ success: true, message: 'Városok visszaállítva alapértelmezettre', cities });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('PUT /api/admin/expeditions/cities error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }

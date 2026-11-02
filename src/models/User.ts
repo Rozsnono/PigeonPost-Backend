@@ -83,6 +83,12 @@ export interface IUser extends Document {
   feederSeeds?: number; // Seeds currently in the loft's trough
   loftBeaconUntil?: Date; // Loft beacon fire expiration date
 
+  // Push értesítési beállítások (szerver oldalon érvényesítve a küldéskor)
+  notificationPrefs?: {
+    enabled: boolean;
+    quietHours: { enabled: boolean; startHour: number; endHour: number; tzOffsetMinutes: number };
+  };
+
   // Hosszú életű munkamenet: a refresh tokenek SHA-256 hash-e (a nyers token csak a kliensnél van)
   refreshTokens?: { hash: string; expiresAt: Date; createdAt: Date }[];
 
@@ -187,6 +193,17 @@ const UserSchema: Schema = new Schema(
     },
     claimedMilestones: { type: [String], default: [] },
     totalKmExplored: { type: Number, default: 0 },
+
+    notificationPrefs: {
+      enabled: { type: Boolean, default: true },
+      quietHours: {
+        enabled: { type: Boolean, default: false },
+        startHour: { type: Number, default: 22, min: 0, max: 23 },
+        endHour: { type: Number, default: 7, min: 0, max: 23 },
+        // Az eszköz UTC-től való eltérése percben (pl. Budapest nyáron +120)
+        tzOffsetMinutes: { type: Number, default: 0, min: -840, max: 840 },
+      },
+    },
 
     refreshTokens: {
       type: [

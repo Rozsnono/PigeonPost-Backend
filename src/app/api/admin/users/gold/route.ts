@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
     const numAmount = parseAdminAmount(amount);
     if (numAmount === null) {
-      return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
+      return NextResponse.json({ error: 'Érvénytelen összeg (0-tól különböző egész szám, legfeljebb ±10 000 000)' }, { status: 400 });
     }
 
     await connectToDatabase();

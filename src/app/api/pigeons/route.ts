@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
         speedKmH: 80,
         fatigue: 0,
       });
-      pigeons = [defaultPigeon.toObject() as any];
+      pigeons = [defaultPigeon.toObject()];
     }
     return NextResponse.json({ pigeons }, { status: 200, headers: CORS_HEADERS });
   } catch (error) {

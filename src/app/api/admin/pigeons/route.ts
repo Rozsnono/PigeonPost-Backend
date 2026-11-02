@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get('status');
     const ownerId = searchParams.get('ownerId');
 
-    const filter: any = {};
+    const filter: Record<string, unknown> = {};
     if (status && status !== 'all') {
       filter.status = status;
     }
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       .lean();
 
     return NextResponse.json(pigeons);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('GET /api/admin/pigeons error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
@@ -123,7 +123,7 @@ export async function PATCH(req: NextRequest) {
       message: `"${pigeon.name}" adatai sikeresen elmentve!`,
       pigeon,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('PATCH /api/admin/pigeons error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }
@@ -160,7 +160,7 @@ export async function DELETE(req: NextRequest) {
       success: true,
       message: `"${pigeon.name}" galamb sikeresen törölve.`,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('DELETE /api/admin/pigeons error:', error);
     return NextResponse.json({ error: 'Server Error' }, { status: 500 });
   }

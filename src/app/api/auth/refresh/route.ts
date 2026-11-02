@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Invalid refresh token' }, { status: 401, headers: CORS_HEADERS });
     }
-    if ((user as any).status === 'banned') {
+    if ((user as { status?: string }).status === 'banned') {
       return NextResponse.json({ error: 'Account is banned' }, { status: 403, headers: CORS_HEADERS });
     }
 

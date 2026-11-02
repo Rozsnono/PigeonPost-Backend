@@ -152,7 +152,7 @@ async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     return NextResponse.json({ error: 'Érvénytelen gyorsítási típus! Használj "tailwind" vagy "escort" opciót.' }, { status: 400, headers: CORS_HEADERS });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('POST /api/messages/[id]/speedup error:', error);
     return NextResponse.json({ error: 'Szerverhiba történt' }, { status: 500, headers: CORS_HEADERS });
   }

@@ -117,7 +117,7 @@ async function handlePOST(req: NextRequest) {
     const slots = await getActiveSlots();
 
     // Weighted random selection
-    const totalWeight = slots.reduce((acc: number, s: any) => acc + (s.weight || 1), 0);
+    const totalWeight = slots.reduce((acc: number, s: { weight?: number }) => acc + (s.weight || 1), 0);
     const rand = Math.random() * totalWeight;
     let cumulative = 0;
     let chosenPrize = slots[0];
