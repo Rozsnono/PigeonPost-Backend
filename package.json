@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed": "dotenv -e .env.local -- npx tsx scripts/seed.ts"
+    "seed": "dotenv -e .env.local -- npx tsx scripts/seed.ts",
+    "test:e2e": "node scripts/e2e.cjs"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -15,6 +16,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.9.5",
     "next": "16.3.4",
+    "nodemailer": "^10.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "^4.5.4"
@@ -24,6 +26,7 @@
     "@types/bcrypt": "^6.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",

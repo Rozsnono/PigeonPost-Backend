@@ -1,4 +1,5 @@
 import { checkFlightStatuses } from '@/lib/flightCron';
+import { sendDailyReminders } from '@/lib/dailyReminders';
 
 export async function register() {
   // Serverless környezetben (pl. Vercel) a folyamat nem tartós: ott DISABLE_INTERNAL_FLIGHT_RUNNER=true
@@ -15,5 +16,10 @@ export async function register() {
     setInterval(() => {
       checkFlightStatuses().catch((err) => console.error('[flightRunner] Periodic check error:', err));
     }, 20000);
+
+    // Napi emlékeztetők (pörgetés, streak) 15 percenként
+    setInterval(() => {
+      sendDailyReminders().catch((err) => console.error('[dailyReminders] Periodic error:', err));
+    }, 15 * 60 * 1000);
   }
 }

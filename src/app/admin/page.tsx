@@ -124,6 +124,17 @@ interface AdminLog {
   context: string;
 }
 
+interface AdminReport {
+  _id: string;
+  reason: string;
+  details?: string;
+  status: 'open' | 'resolved' | 'dismissed';
+  createdAt: string;
+  reporterId?: { username?: string } | null;
+  targetUserId?: { _id?: string; username?: string; email?: string; status?: string } | null;
+  messageId?: { content?: string } | null;
+}
+
 interface AdminStats {
   stats?: { activeUsers?: number; flyingPigeons?: number; deadPigeons?: number; seedEconomy?: number };
   logs?: AdminLog[];
@@ -147,7 +158,7 @@ interface AdminMessages {
 
 type PigeonStatusFilter = 'all' | 'flying' | 'idle' | 'resting' | 'dead';
 
-type Tab = 'overview' | 'users' | 'pigeons' | 'species' | 'expeditions' | 'wheel' | 'messages' | 'activity';
+type Tab = 'overview' | 'users' | 'pigeons' | 'species' | 'expeditions' | 'wheel' | 'messages' | 'reports' | 'activity';
 
 const C = {
   purple: '#818cf8', blue: '#60a5fa', green: '#34d399', red: '#f87171', yellow: '#fbbf24', amber: '#fbbf24'
@@ -232,6 +243,7 @@ export default function AdminDashboard() {
   const [pigeons, setPigeons] = useState<AdminPigeon[]>([]);
   const [speciesList, setSpeciesList] = useState<AdminSpecies[]>([]);
   const [msgs, setMsgs] = useState<AdminMessages | null>(null);
+  const [reports, setReports] = useState<AdminReport[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [toast, setToast] = useState('');
@@ -342,6 +354,17 @@ export default function AdminDashboard() {
       }
     } catch {}
   }, [hdr]);
+  const fetchReports = async () => {
+    const r = await fetch('/api/admin/reports?status=open', { headers: hdr() });
+    if (r.ok) setReports(await r.json());
+  };
+
+  const actOnReport = async (id: string, action: 'resolve' | 'dismiss' | 'ban') => {
+    if (action === 'ban' && !confirm('Letiltod a jelentett felhasználót? Kijelentkeztetjük, és nem tud belépni.')) return;
+    const r = await fetch('/api/admin/reports', { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...hdr() }, body: JSON.stringify({ id, action }) });
+    if (r.ok) { toast$(action === 'ban' ? '✓ Felhasználó letiltva' : '✓ Jelentés lezárva'); fetchReports(); } else toast$(`✗ Sikertelen (${r.status})`);
+  };
+
   const fetchMsgs    = useCallback(async () => { try { const r = await fetch('/api/admin/messages',{ headers: hdr() }); if (r.ok) setMsgs(await r.json()); } catch {} }, [hdr]);
 
   const login = async (e: React.FormEvent) => {
@@ -363,6 +386,7 @@ export default function AdminDashboard() {
     if (tab === 'expeditions') fetchCities();
     if (tab === 'wheel') fetchWheel();
     if (tab === 'messages') fetchMsgs();
+    if (tab === 'reports') fetchReports();
   }, [tab, authed]);
 
   const refresh = async () => {
@@ -377,6 +401,7 @@ export default function AdminDashboard() {
     if (tab === 'expeditions') await fetchCities();
     if (tab === 'wheel') await fetchWheel();
     if (tab === 'messages') await fetchMsgs();
+    if (tab === 'reports') await fetchReports();
     setTimeout(() => setSpinning(false), 500);
   };
 
@@ -888,6 +913,7 @@ export default function AdminDashboard() {
     { id: 'expeditions', label: 'Expedíciók',     Icon: I.Compass,  badge: cities.length },
     { id: 'wheel',       label: 'Szerencsekerék', Icon: I.Zap,      badge: wheelSlots.length },
     { id: 'messages',  label: 'Üzenetek',       Icon: I.Mail,     badge: msgs?.stats?.flyingMessages },
+    { id: 'reports',   label: 'Jelentések',     Icon: I.Skull,    badge: reports.length || undefined },
     { id: 'activity',  label: 'Aktivitás',      Icon: I.Activity, badge: undefined },
   ];
 
@@ -1793,6 +1819,35 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </>)}
+
+          {/* ══ REPORTS ═══════════════════════════════════════════════════ */}
+          {tab === 'reports' && (<>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {reports.length === 0 && <div style={{ color: '#64748b', padding: 24, textAlign: 'center' }}>Nincs nyitott jelentés. 🎉</div>}
+              {reports.map((rp) => (
+                <div key={rp._id} style={{ background: 'rgba(15,21,36,0.8)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <strong style={{ color: '#f1f5f9' }}>{rp.targetUserId?.username ?? '(törölt felhasználó)'}</strong>
+                      <span style={{ color: '#64748b', fontSize: 12 }}> · {rp.targetUserId?.email}</span>
+                      {rp.targetUserId?.status === 'banned' && <span style={{ color: C.red, fontSize: 12 }}> · tiltva</span>}
+                    </div>
+                    <span style={{ color: '#94a3b8', fontSize: 12 }}>{new Date(rp.createdAt).toLocaleString('hu-HU')}</span>
+                  </div>
+                  <div style={{ margin: '8px 0', fontSize: 13, color: '#cbd5e1' }}>
+                    <strong>{rp.reason}</strong> – jelentette: {rp.reporterId?.username ?? '?'}
+                    {rp.details ? <div style={{ color: '#94a3b8', marginTop: 4 }}>&bdquo;{rp.details}&rdquo;</div> : null}
+                    {rp.messageId?.content ? <div style={{ marginTop: 6, padding: 8, background: 'rgba(255,255,255,0.04)', borderRadius: 8, color: '#94a3b8' }}>Levél: {rp.messageId.content}</div> : null}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button style={btn('danger')} onClick={() => actOnReport(rp._id, 'ban')}>Letiltás</button>
+                    <button style={btn('success')} onClick={() => actOnReport(rp._id, 'resolve')}>Lezárás</button>
+                    <button style={btn('ghost')} onClick={() => actOnReport(rp._id, 'dismiss')}>Elvetés</button>
+                  </div>
+                </div>
+              ))}
             </div>
           </>)}
 

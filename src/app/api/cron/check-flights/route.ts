@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { checkFlightStatuses } from '@/lib/flightCron';
+import { sendDailyReminders } from '@/lib/dailyReminders';
 
 function isAuthorizedCron(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -20,8 +21,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const result = await checkFlightStatuses();
+  // Serverless környezetben ez a végpont indítja a napi emlékeztetőket is (a futás gyors, ciklusonként egyszer küld)
+  const reminders = await sendDailyReminders().catch((err) => {
+    console.error('[cron] dailyReminders hiba:', err);
+    return null;
+  });
   if ('error' in result) {
     return NextResponse.json(result, { status: 500 });
   }
-  return NextResponse.json(result, { status: 200 });
+  return NextResponse.json({ ...result, reminders }, { status: 200 });
 }

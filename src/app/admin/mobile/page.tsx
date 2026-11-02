@@ -2,7 +2,7 @@
 
 /**
  * PigeonPost – mobilra szabott, egyszerűsített admin.
- * Funkciók: áttekintés, felhasználók keresése, arany/mag/kalitka jóváírás, fiók letiltása.
+ * Funkciók: áttekintés, felhasználók (arany/mag/kalitka jóváírás, tiltás/feloldás), jelentések, repülések.
  * A teljes admin: /admin. Hitelesítés: Authorization: Bearer <ADMIN_SECRET> (mint a teljes adminnál).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -16,6 +16,24 @@ interface AdminUser {
   inventory?: { seeds?: number; cages?: number };
   location?: { city?: string };
   isDeleted?: boolean;
+  status?: 'active' | 'banned';
+}
+
+interface AdminReport {
+  _id: string;
+  reason: string;
+  details?: string;
+  createdAt: string;
+  reporterId?: { username?: string } | null;
+  targetUserId?: { username?: string; status?: string } | null;
+  messageId?: { content?: string } | null;
+}
+
+interface AdminFlight {
+  _id: string;
+  name?: string;
+  status: string;
+  ownerId?: { username?: string } | null;
 }
 
 interface AdminStats {
@@ -23,7 +41,7 @@ interface AdminStats {
   serverTime?: string;
 }
 
-type Tab = 'overview' | 'users';
+type Tab = 'overview' | 'users' | 'reports' | 'flights';
 type ItemKind = 'gold' | 'seeds' | 'cages';
 
 const ITEM_META: Record<ItemKind, { label: string; endpoint: string; icon: string; quick: number[] }> = {
@@ -53,6 +71,8 @@ export default function MobileAdmin() {
   const [tab, setTab] = useState<Tab>('overview');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [reports, setReports] = useState<AdminReport[]>([]);
+  const [flights, setFlights] = useState<AdminFlight[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -77,6 +97,18 @@ export default function MobileAdmin() {
     const r = await fetch('/api/admin/users', { headers: { Authorization: `Bearer ${s}` } });
     if (!r.ok) throw new Error(String(r.status));
     setUsers(await r.json());
+  }, []);
+
+  const fetchReports = useCallback(async (s: string) => {
+    const r = await fetch('/api/admin/reports?status=open', { headers: { Authorization: `Bearer ${s}` } });
+    if (!r.ok) throw new Error(String(r.status));
+    setReports(await r.json());
+  }, []);
+
+  const fetchFlights = useCallback(async (s: string) => {
+    const r = await fetch('/api/admin/flights', { headers: { Authorization: `Bearer ${s}` } });
+    if (!r.ok) throw new Error(String(r.status));
+    setFlights(await r.json());
   }, []);
 
   const enter = useCallback(
@@ -120,6 +152,8 @@ export default function MobileAdmin() {
     setInput('');
     setStats(null);
     setUsers([]);
+    setReports([]);
+    setFlights([]);
     try {
       sessionStorage.removeItem(STORAGE_KEY);
     } catch {}
@@ -150,16 +184,55 @@ export default function MobileAdmin() {
     }
   };
 
-  const banUser = async (u: AdminUser) => {
-    if (!confirm(`Letiltod „${u.username}" fiókját? (archiválás, nem végleges törlés)`)) return;
-    const r = await fetch(`/api/admin/users?id=${u._id}`, { method: 'DELETE', headers: hdr() });
+  const toggleBan = async (u: AdminUser) => {
+    const ban = u.status !== 'banned';
+    if (!confirm(ban ? `Letiltod „${u.username}" fiókját? Kijelentkeztetjük, és nem tud belépni.` : `Feloldod „${u.username}" tiltását?`)) return;
+    const r = await fetch('/api/admin/users/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...hdr() },
+      body: JSON.stringify({ userId: u._id, status: ban ? 'banned' : 'active' }),
+    });
     if (r.ok) {
-      showToast(`✓ ${u.username} letiltva`);
+      showToast(ban ? `✓ ${u.username} letiltva` : `✓ ${u.username} tiltása feloldva`);
       fetchUsers(secret).catch((e) => console.error(e));
     } else {
       showToast(`✗ Sikertelen (${r.status})`);
     }
   };
+
+  const actOnReport = async (id: string, action: 'resolve' | 'dismiss' | 'ban') => {
+    if (action === 'ban' && !confirm('Letiltod a jelentett felhasználót?')) return;
+    const r = await fetch('/api/admin/reports', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...hdr() },
+      body: JSON.stringify({ id, action }),
+    });
+    if (r.ok) {
+      showToast(action === 'ban' ? '✓ Felhasználó letiltva' : '✓ Jelentés lezárva');
+      fetchReports(secret).catch((e) => console.error(e));
+    } else {
+      showToast(`✗ Sikertelen (${r.status})`);
+    }
+  };
+
+  const deliverAll = async () => {
+    if (!confirm('Minden repülő levelet azonnal kézbesítesz, az expedíciók hazaérnek, a galambok pihennek. Biztos?')) return;
+    const r = await fetch('/api/admin/flights', { method: 'POST', headers: hdr() });
+    if (r.ok) {
+      showToast('✓ Minden repülés felgyorsítva');
+      fetchFlights(secret).catch((e) => console.error(e));
+    } else {
+      showToast(`✗ Sikertelen (${r.status})`);
+    }
+  };
+
+  // Fül váltáskor frissítjük az adott fül adatait
+  useEffect(() => {
+    if (!authed) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a setState csak az aszinkron lekérés után fut
+    if (tab === 'reports') fetchReports(secret).catch((e) => console.error('[admin/mobile] jelentések:', e));
+    if (tab === 'flights') fetchFlights(secret).catch((e) => console.error('[admin/mobile] repülések:', e));
+  }, [tab, authed, secret, fetchReports, fetchFlights]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -263,7 +336,10 @@ export default function MobileAdmin() {
               {filtered.map((u) => (
                 <div key={u._id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <strong style={{ fontSize: 15, overflowWrap: 'anywhere' }}>{u.username}</strong>
+                    <strong style={{ fontSize: 15, overflowWrap: 'anywhere' }}>
+                      {u.username}
+                      {u.status === 'banned' && <span style={{ color: C.red, fontSize: 11, marginLeft: 6 }}>TILTVA</span>}
+                    </strong>
                     <span style={{ color: C.muted, fontSize: 12, whiteSpace: 'nowrap' }}>Lv {u.level ?? 1}</span>
                   </div>
                   <div style={{ color: C.muted, fontSize: 12, overflowWrap: 'anywhere' }}>
@@ -288,13 +364,56 @@ export default function MobileAdmin() {
                         {ITEM_META[k].icon} {ITEM_META[k].label}
                       </button>
                     ))}
-                    <button onClick={() => banUser(u)} style={{ ...ghostBtn, color: C.red, flexBasis: '100%' }}>
-                      Letiltás
+                    <button onClick={() => toggleBan(u)} style={{ ...ghostBtn, color: u.status === 'banned' ? C.green : C.red, flexBasis: '100%' }}>
+                      {u.status === 'banned' ? 'Tiltás feloldása' : 'Letiltás'}
                     </button>
                   </div>
                 </div>
               ))}
               {filtered.length === 0 && <p style={{ color: C.muted, textAlign: 'center' }}>Nincs találat.</p>}
+            </div>
+          </>
+        )}
+        {tab === 'reports' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {reports.length === 0 && <p style={{ color: C.muted, textAlign: 'center' }}>Nincs nyitott jelentés. 🎉</p>}
+            {reports.map((rp) => (
+              <div key={rp._id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14 }}>
+                <strong>{rp.targetUserId?.username ?? '(törölt felhasználó)'}</strong>
+                {rp.targetUserId?.status === 'banned' && <span style={{ color: C.red, fontSize: 11, marginLeft: 6 }}>TILTVA</span>}
+                <div style={{ color: C.muted, fontSize: 12, margin: '4px 0' }}>
+                  {rp.reason} · jelentette: {rp.reporterId?.username ?? '?'} · {new Date(rp.createdAt).toLocaleString('hu-HU')}
+                </div>
+                {rp.details && <div style={{ fontSize: 13, marginBottom: 6 }}>&bdquo;{rp.details}&rdquo;</div>}
+                {rp.messageId?.content && (
+                  <div style={{ fontSize: 13, color: C.muted, background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: 8, marginBottom: 8, overflowWrap: 'anywhere' }}>
+                    Levél: {rp.messageId.content}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => actOnReport(rp._id, 'ban')} style={{ ...ghostBtn, flex: 1, color: C.red }}>Tiltás</button>
+                  <button onClick={() => actOnReport(rp._id, 'resolve')} style={{ ...ghostBtn, flex: 1 }}>Lezár</button>
+                  <button onClick={() => actOnReport(rp._id, 'dismiss')} style={{ ...ghostBtn, flex: 1 }}>Elvet</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === 'flights' && (
+          <>
+            <button onClick={deliverAll} style={{ ...primaryBtn, width: '100%', marginBottom: 12 }}>
+              ⚡ Minden repülés azonnali befejezése
+            </button>
+            <p style={{ color: C.muted, fontSize: 12, margin: '0 0 8px' }}>{flights.length} galamb úton</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {flights.map((f) => (
+                <div key={f._id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span>🕊️ {f.name ?? 'Galamb'} <span style={{ color: C.muted }}>· {f.ownerId?.username ?? '?'}</span></span>
+                  <span style={{ color: f.status === 'returning' ? C.amber : C.green, fontSize: 12 }}>{f.status}</span>
+                </div>
+              ))}
+              {flights.length === 0 && <p style={{ color: C.muted, textAlign: 'center' }}>Nincs repülő galamb.</p>}
             </div>
           </>
         )}
@@ -314,7 +433,9 @@ export default function MobileAdmin() {
       >
         {([
           ['overview', '📊', 'Áttekintés'],
-          ['users', '👥', 'Felhasználók'],
+          ['users', '👥', 'Emberek'],
+          ['reports', '🚩', 'Jelentések'],
+          ['flights', '🕊️', 'Repülések'],
         ] as const).map(([id, icon, label]) => (
           <button
             key={id}

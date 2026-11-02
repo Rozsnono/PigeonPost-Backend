@@ -77,11 +77,22 @@ export interface IUser extends Document {
     dailyStreak: number;
     lastGambleAt?: Date;
     questsCompletedToday?: string[];
+    // Napi emlékeztető push már elment-e az aktuális elérhetőséghez (lib/dailyReminders.ts)
+    gambleReminderSentAt?: Date;
+    streakReminderSentAt?: Date;
   };
   claimedMilestones?: string[];
   totalKmExplored?: number;
   feederSeeds?: number; // Seeds currently in the loft's trough
   loftBeaconUntil?: Date; // Loft beacon fire expiration date
+
+  // Moderáció: tiltott felhasználó nem tud belépni és nem újíthat munkamenetet
+  status?: 'active' | 'banned';
+  bannedAt?: Date | null;
+  banReason?: string;
+
+  // Elfelejtett jelszó: a kiküldött kód hash-e (a nyers kód csak az emailben van)
+  passwordReset?: { codeHash: string; expiresAt: Date; attempts: number };
 
   // Push értesítési beállítások (szerver oldalon érvényesítve a küldéskor)
   notificationPrefs?: {
@@ -97,6 +108,15 @@ export interface IUser extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const PasswordResetSchema = new Schema(
+  {
+    codeHash: { type: String, required: true },
+    expiresAt: { type: Date, required: true },
+    attempts: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
 
 const UserSchema: Schema = new Schema(
   {
@@ -190,9 +210,17 @@ const UserSchema: Schema = new Schema(
       dailyStreak: { type: Number, default: 0 },
       lastGambleAt: { type: Date, default: null },
       questsCompletedToday: { type: [String], default: [] },
+      gambleReminderSentAt: { type: Date, default: null },
+      streakReminderSentAt: { type: Date, default: null },
     },
     claimedMilestones: { type: [String], default: [] },
     totalKmExplored: { type: Number, default: 0 },
+
+    status: { type: String, enum: ['active', 'banned'], default: 'active' },
+    bannedAt: { type: Date, default: null },
+    banReason: { type: String, default: '' },
+
+    passwordReset: { type: PasswordResetSchema, default: undefined, select: false },
 
     notificationPrefs: {
       enabled: { type: Boolean, default: true },
